@@ -27,9 +27,11 @@ import {
   ChartLegend,
   ChartLegendContent,
 } from '@/components/ui/chart'
-import { ArrowUpRight, DollarSign, ShoppingBag, Target, TrendingUp } from 'lucide-react'
+import { ArrowUpRight, DollarSign, ShoppingBag, Target, TrendingUp, Bike } from 'lucide-react'
 import { Progress } from '@/components/ui/progress'
 import { cn } from '@/lib/utils'
+
+const DELIVERY_CHANNELS = CHANNELS.filter((ch) => ch !== 'Loja / Restaurante')
 
 const CHANNEL_COLORS: Record<string, string> = {
   'Loja / Restaurante': 'hsl(var(--chart-1))',
@@ -114,6 +116,16 @@ export default function Dashboard() {
     const projRevenue = (totalRevenue / daysPassed) * daysInM
     const projOrders = Math.round((totalOrders / daysPassed) * daysInM)
 
+    const deliveryOrders = DELIVERY_CHANNELS.reduce(
+      (acc, ch) => acc + (channelStats[ch]?.orders ?? 0),
+      0,
+    )
+    const deliveryRevenue = DELIVERY_CHANNELS.reduce(
+      (acc, ch) => acc + (channelStats[ch]?.revenue ?? 0),
+      0,
+    )
+    const deliveryTicket = deliveryOrders > 0 ? deliveryRevenue / deliveryOrders : 0
+
     return {
       totalOrders,
       totalRevenue,
@@ -123,6 +135,9 @@ export default function Dashboard() {
       channelStats,
       projRevenue,
       projOrders,
+      deliveryOrders,
+      deliveryRevenue,
+      deliveryTicket,
     }
   }, [sales, goals, monthParam])
 
@@ -224,6 +239,34 @@ export default function Dashboard() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Total de Delivery KPI */}
+      <Card className="shadow-subtle border-primary/30 bg-primary/5">
+        <CardHeader className="flex flex-row items-center justify-between pb-2">
+          <CardTitle className="text-sm font-medium text-primary">Total de Delivery</CardTitle>
+          <Bike className="h-4 w-4 text-primary" />
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-3 gap-4">
+            <div>
+              <p className="text-xs text-muted-foreground mb-1">Pedidos</p>
+              <div className="text-xl font-bold text-foreground">{metrics.deliveryOrders}</div>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground mb-1">Faturamento</p>
+              <div className="text-xl font-bold text-foreground">
+                {formatCurrency(metrics.deliveryRevenue)}
+              </div>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground mb-1">Tkt Médio</p>
+              <div className="text-xl font-bold text-foreground">
+                {formatCurrency(metrics.deliveryTicket)}
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
