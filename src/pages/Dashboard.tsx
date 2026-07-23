@@ -30,6 +30,7 @@ import {
 import { ArrowUpRight, DollarSign, ShoppingBag, Target, TrendingUp, Bike } from 'lucide-react'
 import { Progress } from '@/components/ui/progress'
 import { cn } from '@/lib/utils'
+import { getWorkingDaysInMonth, getWorkingDaysPassed } from '@/lib/working-days'
 
 const DELIVERY_CHANNELS = CHANNELS.filter((ch) => ch !== 'Loja / Restaurante')
 
@@ -126,6 +127,24 @@ export default function Dashboard() {
     )
     const deliveryTicket = deliveryOrders > 0 ? deliveryRevenue / deliveryOrders : 0
 
+    const [yearStr, monthStr] = monthParam.split('-')
+    const yearNum = parseInt(yearStr, 10)
+    const monthIdx = parseInt(monthStr, 10) - 1
+    const totalWorkingDays = getWorkingDaysInMonth(yearNum, monthIdx)
+    const workingDaysPassed = getWorkingDaysPassed(yearNum, monthIdx)
+
+    const channelProjections = CHANNELS.reduce(
+      (acc, ch) => {
+        const rev = channelStats[ch].revenue
+        acc[ch] = workingDaysPassed > 0 ? (rev / workingDaysPassed) * totalWorkingDays : 0
+        return acc
+      },
+      {} as Record<Channel, number>,
+    )
+
+    const totalProjection =
+      workingDaysPassed > 0 ? (totalRevenue / workingDaysPassed) * totalWorkingDays : 0
+
     return {
       totalOrders,
       totalRevenue,
@@ -138,6 +157,8 @@ export default function Dashboard() {
       deliveryOrders,
       deliveryRevenue,
       deliveryTicket,
+      channelProjections,
+      totalProjection,
     }
   }, [sales, goals, monthParam])
 
@@ -353,6 +374,7 @@ export default function Dashboard() {
                 <th className="px-4 py-3 font-medium text-right">Pedidos</th>
                 <th className="px-4 py-3 font-medium text-right">Faturamento</th>
                 <th className="px-4 py-3 font-medium text-right">Tkt Médio</th>
+                <th className="px-4 py-3 font-medium text-right">Projeção Fechto Mês</th>
                 <th className="px-4 py-3 font-medium text-right">% Meta (R$)</th>
               </tr>
             </thead>
@@ -367,6 +389,9 @@ export default function Dashboard() {
                     <td className="px-4 py-3 text-right">{stat.orders}</td>
                     <td className="px-4 py-3 text-right">{formatCurrency(stat.revenue)}</td>
                     <td className="px-4 py-3 text-right">{formatCurrency(tkt)}</td>
+                    <td className="px-4 py-3 text-right">
+                      {formatCurrency(metrics.channelProjections[ch])}
+                    </td>
                     <td className="px-4 py-3 text-right">
                       <span
                         className={cn(
@@ -389,6 +414,7 @@ export default function Dashboard() {
                 <td className="px-4 py-4 text-right">{metrics.totalOrders}</td>
                 <td className="px-4 py-4 text-right">{formatCurrency(metrics.totalRevenue)}</td>
                 <td className="px-4 py-4 text-right">{formatCurrency(metrics.ticket)}</td>
+                <td className="px-4 py-4 text-right">{formatCurrency(metrics.totalProjection)}</td>
                 <td className="px-4 py-4 text-right">{metrics.progress.toFixed(1)}%</td>
               </tr>
             </tbody>
