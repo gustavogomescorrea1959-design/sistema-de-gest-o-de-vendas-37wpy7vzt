@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-23T18:58:24.427Z",
+  "generatedAt": "2026-07-23T19:05:59.559Z",
   "collections": [
     {
       "name": "users",
@@ -42,6 +42,149 @@
       "indexes": [
         "CREATE UNIQUE INDEX `idx_tokenKey__pb_users_auth_` ON `users` (`tokenKey`)",
         "CREATE UNIQUE INDEX `idx_email__pb_users_auth_` ON `users` (`email`) WHERE `email` != ''"
+      ]
+    },
+    {
+      "name": "goals",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != ''",
+        "view": "@request.auth.id != ''",
+        "create": "@request.auth.id != ''",
+        "update": "@request.auth.id != ''",
+        "delete": "@request.auth.id != ''"
+      },
+      "fields": [
+        {
+          "name": "channel",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": [
+            "Loja / Restaurante",
+            "Central de Pedidos",
+            "iFood",
+            "Cardápio Web",
+            "99Food",
+            "WhatsApp",
+            "Telefone"
+          ]
+        },
+        {
+          "name": "goal_orders",
+          "type": "number",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "goal_revenue",
+          "type": "number",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "standard_ticket",
+          "type": "number",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "period",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "notes",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": ["CREATE UNIQUE INDEX idx_goals_channel ON goals (channel)"]
+    },
+    {
+      "name": "daily_sales",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != ''",
+        "view": "@request.auth.id != ''",
+        "create": "@request.auth.id != ''",
+        "update": "@request.auth.id != ''",
+        "delete": "@request.auth.id != ''"
+      },
+      "fields": [
+        {
+          "name": "date",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "channel",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": [
+            "Loja / Restaurante",
+            "Central de Pedidos",
+            "iFood",
+            "Cardápio Web",
+            "99Food",
+            "WhatsApp",
+            "Telefone"
+          ]
+        },
+        {
+          "name": "orders",
+          "type": "number",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "revenue",
+          "type": "number",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "average_ticket",
+          "type": "number",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE UNIQUE INDEX idx_daily_sales_date_channel ON daily_sales (date, channel)",
+        "CREATE INDEX idx_daily_sales_date ON daily_sales (date)"
       ]
     }
   ]
