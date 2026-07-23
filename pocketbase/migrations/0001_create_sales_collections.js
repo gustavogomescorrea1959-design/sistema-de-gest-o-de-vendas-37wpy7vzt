@@ -1,15 +1,5 @@
 migrate(
   (app) => {
-    const channels = [
-      'Loja / Restaurante',
-      'Central de Pedidos',
-      'iFood',
-      'Cardápio Web',
-      '99Food',
-      'WhatsApp',
-      'Telefone',
-    ]
-
     const goals = new Collection({
       name: 'goals',
       type: 'base',
@@ -19,7 +9,21 @@ migrate(
       updateRule: "@request.auth.id != ''",
       deleteRule: "@request.auth.id != ''",
       fields: [
-        { name: 'channel', type: 'select', required: true, values: channels, maxSelect: 1 },
+        {
+          name: 'channel',
+          type: 'select',
+          required: true,
+          values: [
+            'Loja / Restaurante',
+            'Central de Pedidos',
+            'iFood',
+            'Cardápio Web',
+            '99Food',
+            'WhatsApp',
+            'Telefone',
+          ],
+          maxSelect: 1,
+        },
         { name: 'goal_orders', type: 'number', required: true, min: 0 },
         { name: 'goal_revenue', type: 'number', required: true, min: 0 },
         { name: 'standard_ticket', type: 'number', required: true, min: 0 },
@@ -42,7 +46,21 @@ migrate(
       deleteRule: "@request.auth.id != ''",
       fields: [
         { name: 'date', type: 'text', required: true },
-        { name: 'channel', type: 'select', required: true, values: channels, maxSelect: 1 },
+        {
+          name: 'channel',
+          type: 'select',
+          required: true,
+          values: [
+            'Loja / Restaurante',
+            'Central de Pedidos',
+            'iFood',
+            'Cardápio Web',
+            '99Food',
+            'WhatsApp',
+            'Telefone',
+          ],
+          maxSelect: 1,
+        },
         { name: 'orders', type: 'number', required: true, min: 0 },
         { name: 'revenue', type: 'number', required: true, min: 0 },
         { name: 'average_ticket', type: 'number', required: true, min: 0 },
