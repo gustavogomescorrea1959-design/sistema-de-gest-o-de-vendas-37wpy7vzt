@@ -7,6 +7,7 @@ import { ChevronLeft, ChevronRight, Calendar as CalendarIcon } from 'lucide-reac
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Calendar } from '@/components/ui/calendar'
 import { cn } from '@/lib/utils'
+import logoAlecrim from '@/assets/icone-alecrim-c1c5d.png'
 
 export function Header() {
   const location = useLocation()
@@ -39,6 +40,7 @@ export function Header() {
     <header className="h-16 flex items-center justify-between px-4 sm:px-6 bg-card border-b border-border/50 shadow-sm z-10 sticky top-0">
       <div className="flex items-center gap-4">
         <SidebarTrigger className="-ml-2 sm:hidden" />
+        <img src={logoAlecrim} alt="Logo Alecrim" className="h-8 w-8 object-contain" />
         <h1 className="text-lg font-semibold text-foreground hidden sm:block">{getPageTitle()}</h1>
       </div>
 

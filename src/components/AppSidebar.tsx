@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom'
-import { LayoutDashboard, ClipboardList, Target, TrendingUp, LogOut } from 'lucide-react'
+import { LayoutDashboard, ClipboardList, Target, LogOut } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/hooks/use-auth'
 import {
@@ -15,6 +15,7 @@ import {
   useSidebar,
 } from '@/components/ui/sidebar'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import logoAlecrim from '@/assets/icone-alecrim-c1c5d.png'
 
 const navItems = [
   { title: 'Dashboard', icon: LayoutDashboard, url: '/dashboard' },
@@ -35,7 +36,7 @@ export function AppSidebar() {
     <Sidebar className="border-r border-border/50">
       <SidebarHeader className="p-4 border-b border-border/50 h-16 flex items-center">
         <div className="flex items-center gap-2 font-bold text-lg text-primary">
-          <TrendingUp className="h-6 w-6" />
+          <img src={logoAlecrim} alt="Logo Alecrim" className="h-8 w-8 object-contain" />
           <span>Gestão de Vendas</span>
         </div>
       </SidebarHeader>
