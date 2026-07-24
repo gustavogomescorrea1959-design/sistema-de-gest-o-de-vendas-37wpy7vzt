@@ -23,6 +23,8 @@ import { cn } from '@/lib/utils'
 import { useToast } from '@/hooks/use-toast'
 import { CHANNELS, Channel, DailySale } from '@/types'
 import { getDailySalesByDate, saveDailySale, deleteDailySalesByDate } from '@/services/api'
+import { ImportSalesButton } from '@/components/ImportSalesButton'
+import { useRealtime } from '@/hooks/use-realtime'
 
 const ICONS: Record<Channel, React.ElementType> = {
   'Loja / Restaurante': Store,
@@ -79,6 +81,8 @@ export default function VendasDiarias() {
   useEffect(() => {
     loadData(date)
   }, [date])
+
+  useRealtime('daily_sales', () => loadData(date))
 
   const handleSave = async () => {
     setSaving(true)
@@ -147,28 +151,31 @@ export default function VendasDiarias() {
           </p>
         </div>
 
-        <Popover>
-          <PopoverTrigger asChild>
-            <Button
-              variant="outline"
-              className={cn(
-                'w-[240px] justify-start text-left font-medium shadow-sm',
-                !date && 'text-muted-foreground',
-              )}
-            >
-              <CalendarIcon className="mr-2 h-4 w-4" />
-              {date ? format(date, 'PPP', { locale: ptBR }) : <span>Selecione uma data</span>}
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-auto p-0" align="end">
-            <Calendar
-              mode="single"
-              selected={date}
-              onSelect={(d) => d && setDate(d)}
-              initialFocus
-            />
-          </PopoverContent>
-        </Popover>
+        <div className="flex items-center gap-2 flex-wrap">
+          <ImportSalesButton onImported={() => loadData(date)} />
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button
+                variant="outline"
+                className={cn(
+                  'w-[240px] justify-start text-left font-medium shadow-sm',
+                  !date && 'text-muted-foreground',
+                )}
+              >
+                <CalendarIcon className="mr-2 h-4 w-4" />
+                {date ? format(date, 'PPP', { locale: ptBR }) : <span>Selecione uma data</span>}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="end">
+              <Calendar
+                mode="single"
+                selected={date}
+                onSelect={(d) => d && setDate(d)}
+                initialFocus
+              />
+            </PopoverContent>
+          </Popover>
+        </div>
       </div>
 
       <Card className="shadow-subtle border-border/60">

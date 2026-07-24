@@ -33,3 +33,44 @@ export const deleteDailySalesByDate = async (date: string) => {
   const records = await getDailySalesByDate(date)
   await Promise.all(records.map((r) => pb.collection('daily_sales').delete(r.id)))
 }
+
+export interface ImportPreviewResult {
+  columns: Record<string, string>
+  totalRows: number
+  skippedRows: number
+  skippedReasons: Array<{ row: number; reason: string }>
+  groups: Array<{
+    date: string
+    channel: string
+    orders: number
+    revenue: number
+    average_ticket: number
+  }>
+}
+
+export interface ImportSummary {
+  created: number
+  updated: number
+  errors: Array<{ date: string; channel: string; error: string }>
+}
+
+export const previewSalesImport = async (
+  filename: string,
+  data: string,
+): Promise<ImportPreviewResult> => {
+  return pb.send('/backend/v1/import/sales/preview', {
+    method: 'POST',
+    body: JSON.stringify({ filename, data }),
+    headers: { 'Content-Type': 'application/json' },
+  })
+}
+
+export const confirmSalesImport = async (
+  groups: ImportPreviewResult['groups'],
+): Promise<ImportSummary> => {
+  return pb.send('/backend/v1/import/sales/confirm', {
+    method: 'POST',
+    body: JSON.stringify({ groups }),
+    headers: { 'Content-Type': 'application/json' },
+  })
+}
