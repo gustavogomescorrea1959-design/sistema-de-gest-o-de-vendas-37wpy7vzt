@@ -124,7 +124,11 @@ export async function importSales(rows: ParsedRow[], cols: ColumnMapping): Promi
           revenue: Math.round(g.revenue * 100) / 100,
           average_ticket: avgTicket,
         })
-        found ? result.updated++ : result.created++
+        if (found) {
+          result.updated++
+        } else {
+          result.created++
+        }
       } catch {
         result.skipped++
         result.errors.push(`Erro ao salvar: ${g.date} - ${g.channel}`)
