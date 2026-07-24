@@ -262,7 +262,7 @@ export default function VendasDiarias() {
                             className={cn(
                               'w-2.5 h-2.5 rounded-full mx-auto transition-colors',
                               !isFilled
-                                ? 'bg-slate-200'
+                                ? 'bg-muted-foreground/30'
                                 : isComplete
                                   ? 'bg-emerald-500'
                                   : 'bg-amber-400',

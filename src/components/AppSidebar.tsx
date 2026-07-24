@@ -35,9 +35,9 @@ export function AppSidebar() {
   return (
     <Sidebar className="border-r border-border/50">
       <SidebarHeader className="p-4 border-b border-border/50 h-16 flex items-center">
-        <div className="flex items-center gap-2 font-bold text-lg text-primary">
+        <div className="flex items-center gap-2 font-bold text-lg text-primary-foreground">
           <img src={logoAlecrim} alt="Logo Alecrim" className="h-8 w-8 object-contain" />
-          <span>Gestão de Vendas</span>
+          <span className="text-foreground">Gestão de Vendas</span>
         </div>
       </SidebarHeader>
       <SidebarContent>

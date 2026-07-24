@@ -40,8 +40,8 @@ const CHANNEL_COLORS: Record<string, string> = {
   iFood: 'hsl(var(--chart-3))',
   'Cardápio Web': 'hsl(var(--chart-4))',
   '99Food': 'hsl(var(--chart-5))',
-  WhatsApp: 'hsl(142, 71%, 45%)',
-  Telefone: 'hsl(45, 93%, 47%)',
+  WhatsApp: 'hsl(var(--chart-6))',
+  Telefone: 'hsl(var(--chart-7))',
 }
 
 export default function Dashboard() {
