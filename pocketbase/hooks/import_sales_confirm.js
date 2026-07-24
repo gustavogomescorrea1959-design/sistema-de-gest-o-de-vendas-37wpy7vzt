@@ -2,59 +2,55 @@ routerAdd(
   'POST',
   '/backend/v1/import/sales/confirm',
   (e) => {
-    const body = e.requestInfo().body || {}
-    const groups = body.groups || []
+    var body = e.requestInfo().body || {}
+    var records = body.records || []
 
-    if (!Array.isArray(groups) || groups.length === 0) {
-      return e.badRequestError('Nenhum grupo fornecido')
-    }
+    var collection = $app.findCollectionByNameOrId('daily_sales')
+    var createdCount = 0
+    var updatedCount = 0
+    var errors = []
 
-    let created = 0
-    let updated = 0
-    const errors = []
+    for (var i = 0; i < records.length; i++) {
+      var rec = records[i]
+      var date = rec.date || ''
+      var channel = rec.channel || ''
+      var orders = Number(rec.orders) || 0
+      var revenue = Number(rec.revenue) || 0
+      var avgTicket = Number(rec.average_ticket) || 0
 
-    const col = $app.findCollectionByNameOrId('daily_sales')
-
-    for (const g of groups) {
+      var filter = "date = '" + date + "' && channel = '" + channel + "'"
+      var existing = []
       try {
-        let existing = null
-        try {
-          const records = $app.findRecordsByFilter(
-            'daily_sales',
-            "date = '" + g.date + "' && channel = '" + g.channel + "'",
-            '',
-            1,
-            0,
-          )
-          if (records.length > 0) existing = records[0]
-        } catch (_) {}
-
-        if (existing) {
-          existing.set('orders', g.orders)
-          existing.set('revenue', g.revenue)
-          existing.set('average_ticket', g.average_ticket)
-          $app.save(existing)
-          updated++
-        } else {
-          const record = new Record(col)
-          record.set('date', g.date)
-          record.set('channel', g.channel)
-          record.set('orders', g.orders)
-          record.set('revenue', g.revenue)
-          record.set('average_ticket', g.average_ticket)
-          $app.save(record)
-          created++
-        }
+        existing = $app.findRecordsByFilter('daily_sales', filter, '', 1, 0)
       } catch (err) {
-        errors.push({
-          date: g.date || '',
-          channel: g.channel || '',
-          error: err.message || String(err),
-        })
+        // filter error — treat as not found
+      }
+
+      if (existing.length > 0) {
+        var record = existing[0]
+        record.set('orders', orders)
+        record.set('revenue', revenue)
+        record.set('average_ticket', avgTicket)
+        $app.save(record)
+        updatedCount++
+      } else {
+        var newRecord = new Record(collection)
+        newRecord.set('date', date)
+        newRecord.set('channel', channel)
+        newRecord.set('orders', orders)
+        newRecord.set('revenue', revenue)
+        newRecord.set('average_ticket', avgTicket)
+        $app.save(newRecord)
+        createdCount++
       }
     }
 
-    return e.json(200, { created: created, updated: updated, errors: errors })
+    return e.json(200, {
+      created: createdCount,
+      updated: updatedCount,
+      total: records.length,
+      errors: errors,
+    })
   },
   $apis.requireAuth(),
 )
