@@ -268,7 +268,7 @@ export default function Dashboard() {
           <Bike className="h-4 w-4 text-primary" />
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             <div>
               <p className="text-xs text-muted-foreground mb-1">Pedidos</p>
               <div className="text-xl font-bold text-foreground">{metrics.deliveryOrders}</div>
