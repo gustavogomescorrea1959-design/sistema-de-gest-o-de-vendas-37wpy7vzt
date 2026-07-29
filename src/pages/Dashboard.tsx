@@ -31,6 +31,7 @@ import { ArrowUpRight, DollarSign, ShoppingBag, Target, TrendingUp, Bike } from 
 import { Progress } from '@/components/ui/progress'
 import { cn } from '@/lib/utils'
 import { getWorkingDaysInMonth, getWorkingDaysPassed } from '@/lib/working-days'
+import { SyncSaiposButton } from '@/components/SyncSaiposButton'
 
 const DELIVERY_CHANNELS = CHANNELS.filter((ch) => ch !== 'Loja / Restaurante')
 
@@ -202,6 +203,9 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6">
+      <div className="flex justify-end">
+        <SyncSaiposButton onSuccess={loadData} />
+      </div>
       {/* Top Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card className="shadow-subtle hover:shadow-md transition-shadow">
