@@ -14,6 +14,7 @@ import { Calendar } from '@/components/ui/calendar'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Label } from '@/components/ui/label'
 import { Loader2, RefreshCw, CalendarIcon, CheckCircle2, AlertCircle } from 'lucide-react'
+import { ClientResponseError } from 'pocketbase'
 import { syncSaipos, testSaiposToken } from '@/services/saipos-sync'
 import { useToast } from '@/hooks/use-toast'
 import { cn } from '@/lib/utils'
@@ -41,8 +42,8 @@ export function SyncSaiposDialog({ open, onOpenChange, onSuccess }: SyncSaiposDi
       setTokenValid(result.valid)
       if (!result.valid) {
         toast({
-          title: 'Token Saipos inválido',
-          description: result.message,
+          title: 'Token Saipos Inválido',
+          description: result.message || 'Token Saipos Inválido',
           variant: 'destructive',
         })
       }
@@ -79,7 +80,7 @@ export function SyncSaiposDialog({ open, onOpenChange, onSuccess }: SyncSaiposDi
       onSuccess?.()
       onOpenChange(false)
     } catch (err: unknown) {
-      const e = err as { response?: { error?: string }; message?: string }
+      const e = err as ClientResponseError
       const message = e?.response?.error || e?.message || 'Erro ao sincronizar com Saipos'
       toast({ title: 'Erro na sincronização', description: message, variant: 'destructive' })
     } finally {
@@ -112,7 +113,7 @@ export function SyncSaiposDialog({ open, onOpenChange, onSuccess }: SyncSaiposDi
           ) : tokenValid === false ? (
             <>
               <AlertCircle className="h-4 w-4 text-red-500" />
-              <span className="text-red-600">Token inválido</span>
+              <span className="text-red-600">Token Saipos Inválido</span>
               <Button
                 variant="ghost"
                 size="sm"

@@ -9,16 +9,16 @@ routerAdd(
     }
 
     var body = e.requestInfo().body || {}
-    function pad(n) {
-      return n < 10 ? '0' + n : '' + n
+
+    var startDateRaw = body.startDate || ''
+    var endDateRaw = body.endDate || ''
+
+    if (!startDateRaw || !endDateRaw) {
+      return e.json(400, { error: 'startDate e endDate são obrigatórios.' })
     }
-    function fmtDate(d) {
-      return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate())
-    }
-    var now = new Date()
-    var endDate = body.endDate || fmtDate(now)
-    var startD = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
-    var startDate = body.startDate || fmtDate(startD)
+
+    var pFilterDateStart = startDateRaw + ' 00:00:00'
+    var pFilterDateEnd = endDateRaw + ' 23:59:59'
 
     var CHANNEL_MAP = {
       ifood: 'iFood',
@@ -79,25 +79,33 @@ routerAdd(
     }
 
     var allRecords = []
-    var page = 1
+    var offset = 0
+    var limit = 300
     var hasMore = true
-    var maxPages = 100
+    var maxPages = 500
 
-    while (hasMore && page <= maxPages) {
+    for (var page = 0; page < maxPages && hasMore; page++) {
       var apiUrl =
-        'https://data-api.saipos.com/v1/sales?startDate=' +
-        startDate +
-        '&endDate=' +
-        endDate +
-        '&page=' +
-        page +
-        '&perPage=100'
+        'https://data.saipos.io/v1/sales_status_histories' +
+        '?p_date_column_filter=shift_date' +
+        '&p_filter_date_start=' +
+        encodeURIComponent(pFilterDateStart) +
+        '&p_filter_date_end=' +
+        encodeURIComponent(pFilterDateEnd) +
+        '&p_limit=' +
+        limit +
+        '&p_offset=' +
+        offset
+
       var res
       try {
         res = $http.send({
           url: apiUrl,
           method: 'GET',
-          headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+          headers: {
+            accept: 'application/json',
+            Authorization: 'Bearer ' + token,
+          },
           timeout: 30,
         })
       } catch (err) {
@@ -105,7 +113,11 @@ routerAdd(
       }
 
       if (res.statusCode === 401 || res.statusCode === 403) {
-        return e.json(401, { error: 'Token do Saipos inválido ou expirado' })
+        return e.json(401, { error: 'Token Saipos Inválido' })
+      }
+      if (res.statusCode === 404) {
+        $app.logger().error('Endpoint não encontrado na API do Saipos', 'url', apiUrl)
+        return e.json(404, { error: 'Endpoint não encontrado na API do Saipos: ' + apiUrl })
       }
       if (res.statusCode === 429) {
         var retryAfter = res.headers['Retry-After'] || res.headers['retry-after'] || '60'
@@ -119,48 +131,78 @@ routerAdd(
       }
 
       var data = res.json || {}
-      var items = data.data || data.items || data.sales || data.vendas || data.results || []
-      if (!Array.isArray(items)) items = []
+      var items =
+        data.data || data.items || data.sales || data.vendas || data.results || data.rows || []
+      if (!Array.isArray(items)) {
+        if (Array.isArray(data)) items = data
+        else items = []
+      }
+
+      if (items.length === 0) {
+        hasMore = false
+        break
+      }
+
       allRecords = allRecords.concat(items)
 
-      var pag = data.pagination || data.meta || data.paginacao || {}
-      var totalPages =
-        pag.totalPages || pag.total_pages || pag.last_page || pag.total_paginas || pag.lastPage || 1
-      hasMore = page < totalPages
-      page++
+      if (items.length < limit) {
+        hasMore = false
+      } else {
+        offset += limit
+      }
     }
 
     var groups = {}
     var skipped = 0
+
     for (var i = 0; i < allRecords.length; i++) {
       var rec = allRecords[i]
-      var canceled = rec.cancelado || rec.canceled || rec.cancelado_sn || rec.está_cancelado || ''
+      var canceled =
+        rec.cancelado ||
+        rec.canceled ||
+        rec.cancelado_sn ||
+        rec.está_cancelado ||
+        rec.is_canceled ||
+        ''
       if (
         canceled === true ||
         canceled === 'S' ||
         canceled === 'SIM' ||
         canceled === 'true' ||
-        canceled === 'yes'
+        canceled === 'yes' ||
+        canceled === 1
       )
         continue
 
-      var rawDate = rec.data_venda || rec.date || rec.data || ''
+      var rawDate = rec.shift_date || rec.data_venda || rec.date || rec.data || rec.sale_date || ''
       var dateStr = parseDateStr(rawDate)
       if (!dateStr) {
         skipped++
         continue
       }
 
-      var rawCh = rec.canal_venda || rec.channel || rec.canal || rec.origem || ''
+      var rawCh =
+        rec.canal_venda ||
+        rec.channel ||
+        rec.canal ||
+        rec.origem ||
+        rec.sales_channel ||
+        rec.channel_name ||
+        ''
       var channel = mapChannel(rawCh)
       if (!channel) {
         skipped++
         continue
       }
 
-      var total = parseNum(rec.valor_total || rec.total || rec.valor || rec.receita || 0)
-      var recOrders = parseNum(rec.quantidade_pedidos || rec.orders || rec.quantidade || 0)
+      var total = parseNum(
+        rec.valor_total || rec.total || rec.valor || rec.receita || rec.amount || rec.revenue || 0,
+      )
+      var recOrders = parseNum(
+        rec.quantidade_pedidos || rec.orders || rec.quantidade || rec.order_count || 0,
+      )
       var key = dateStr + '|' + channel
+
       if (!groups[key]) {
         groups[key] = { date: dateStr, channel: channel, orders: 0, revenue: 0 }
       }
@@ -172,11 +214,13 @@ routerAdd(
     var inserted = 0
     var updated = 0
     var keys = Object.keys(groups)
+
     for (var j = 0; j < keys.length; j++) {
       var g = groups[keys[j]]
       var avg = g.orders > 0 ? Math.round((g.revenue / g.orders) * 100) / 100 : 0
       var filter = "date = '" + g.date + "' && channel = '" + g.channel + "'"
       var existing = []
+
       try {
         existing = $app.findRecordsByFilter('daily_sales', filter, '', 1, 0)
       } catch (_) {}

@@ -9,11 +9,16 @@ routerAdd(
     }
 
     var res
+    var testUrl =
+      'https://data.saipos.io/v1/sales_status_histories?p_date_column_filter=shift_date&p_limit=1&p_offset=0'
     try {
       res = $http.send({
-        url: 'https://data-api.saipos.com/v1/sales?page=1&perPage=1',
+        url: testUrl,
         method: 'GET',
-        headers: { Authorization: 'Bearer ' + token },
+        headers: {
+          accept: 'application/json',
+          Authorization: 'Bearer ' + token,
+        },
         timeout: 15,
       })
     } catch (err) {
@@ -21,7 +26,11 @@ routerAdd(
     }
 
     if (res.statusCode === 401 || res.statusCode === 403) {
-      return e.json(200, { valid: false, message: 'Token inválido ou expirado' })
+      return e.json(200, { valid: false, message: 'Token Saipos Inválido' })
+    }
+    if (res.statusCode === 404) {
+      $app.logger().error('Endpoint não encontrado na API do Saipos (test route)', 'url', testUrl)
+      return e.json(200, { valid: false, message: 'Endpoint não encontrado na API do Saipos' })
     }
     if (res.statusCode === 429) {
       return e.json(200, { valid: true, message: 'Token válido (limite de requisições atingido)' })
