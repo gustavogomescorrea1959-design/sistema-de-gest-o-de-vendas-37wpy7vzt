@@ -10,6 +10,10 @@ export interface SyncSaiposResult {
 export interface SaiposTokenTest {
   valid: boolean
   message: string
+  statusCode?: number
+  responseBody?: string
+  requestUrl?: string
+  data?: unknown
 }
 
 export async function syncSaipos(startDate: string, endDate: string): Promise<SyncSaiposResult> {

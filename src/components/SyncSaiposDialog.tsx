@@ -13,9 +13,23 @@ import { Button } from '@/components/ui/button'
 import { Calendar } from '@/components/ui/calendar'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Label } from '@/components/ui/label'
-import { Loader2, RefreshCw, CalendarIcon, CheckCircle2, AlertCircle } from 'lucide-react'
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from '@/components/ui/accordion'
+import {
+  Loader2,
+  RefreshCw,
+  CalendarIcon,
+  CheckCircle2,
+  AlertCircle,
+  Copy,
+  Check,
+} from 'lucide-react'
 import { ClientResponseError } from 'pocketbase'
-import { syncSaipos, testSaiposToken } from '@/services/saipos-sync'
+import { syncSaipos, testSaiposToken, type SaiposTokenTest } from '@/services/saipos-sync'
 import { useToast } from '@/hooks/use-toast'
 import { cn } from '@/lib/utils'
 
@@ -33,12 +47,16 @@ export function SyncSaiposDialog({ open, onOpenChange, onSuccess }: SyncSaiposDi
   const [syncing, setSyncing] = useState(false)
   const [testing, setTesting] = useState(false)
   const [tokenValid, setTokenValid] = useState<boolean | null>(null)
+  const [testResult, setTestResult] = useState<SaiposTokenTest | null>(null)
+  const [copied, setCopied] = useState(false)
   const { toast } = useToast()
 
   const handleTestToken = async () => {
     setTesting(true)
+    setTestResult(null)
     try {
       const result = await testSaiposToken()
+      setTestResult(result)
       setTokenValid(result.valid)
       if (!result.valid) {
         toast({
@@ -49,9 +67,24 @@ export function SyncSaiposDialog({ open, onOpenChange, onSuccess }: SyncSaiposDi
       }
     } catch {
       setTokenValid(false)
+      setTestResult(null)
     } finally {
       setTesting(false)
     }
+  }
+
+  const handleCopyDetails = () => {
+    if (!testResult) return
+    const details = [
+      `Status: ${testResult.statusCode ?? 'N/A'}`,
+      `Message: ${testResult.message}`,
+      `URL: ${testResult.requestUrl ?? 'N/A'}`,
+      `Response Body:`,
+      testResult.responseBody || '(empty)',
+    ].join('\n')
+    navigator.clipboard.writeText(details)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
   }
 
   useEffect(() => {
@@ -126,6 +159,55 @@ export function SyncSaiposDialog({ open, onOpenChange, onSuccess }: SyncSaiposDi
             </>
           ) : null}
         </div>
+
+        {testResult && !testResult.valid && (
+          <Accordion type="single" collapsible className="w-full">
+            <AccordionItem value="error-details" className="border rounded-md px-3">
+              <AccordionTrigger className="text-sm font-medium py-3">
+                Detalhes do erro
+              </AccordionTrigger>
+              <AccordionContent className="space-y-3 pt-1">
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-medium text-muted-foreground">Código HTTP</span>
+                    <span className="text-xs font-mono bg-muted px-2 py-0.5 rounded">
+                      {testResult.statusCode ?? 'N/A'}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-xs font-medium text-muted-foreground">
+                      URL da requisição
+                    </span>
+                    <pre className="mt-1 text-xs font-mono bg-muted p-2 rounded overflow-x-auto whitespace-pre-wrap break-all">
+                      {testResult.requestUrl || 'N/A'}
+                    </pre>
+                  </div>
+                  <div>
+                    <span className="text-xs font-medium text-muted-foreground">
+                      Corpo da resposta
+                    </span>
+                    <pre className="mt-1 text-xs font-mono bg-muted p-2 rounded overflow-x-auto max-h-40 whitespace-pre-wrap break-all">
+                      {testResult.responseBody || '(vazio)'}
+                    </pre>
+                  </div>
+                </div>
+                <Button variant="outline" size="sm" onClick={handleCopyDetails} className="w-full">
+                  {copied ? (
+                    <>
+                      <Check className="mr-2 h-3 w-3" />
+                      Copiado!
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="mr-2 h-3 w-3" />
+                      Copiar detalhes
+                    </>
+                  )}
+                </Button>
+              </AccordionContent>
+            </AccordionItem>
+          </Accordion>
+        )}
 
         <div className="space-y-2">
           <Label>Período</Label>

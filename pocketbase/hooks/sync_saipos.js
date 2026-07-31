@@ -4,9 +4,18 @@ routerAdd(
   (e) => {
     var token = $secrets.get('SAIPOS_API_TOKEN')
     if (!token) {
+      try {
+        var settingsRec = $app.findFirstRecordByData('settings', 'key', 'SAIPOS_API_TOKEN')
+        if (settingsRec) {
+          token = settingsRec.getString('value')
+        }
+      } catch (_) {}
+    }
+    if (!token) {
       token =
         'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJrZXkiOiI5ZGMyZGM4My0wNTg4LTdhMzEtOGE1MS00NjQyMzdkMzM1OWUiLCJpYXQiOjE3ODUyNDM4NzZ9.mAsya8DaWs7CqTBfU8qHS8tJIpv8KUO9pbpFiHJWXdg'
     }
+    token = token.replace(/^Bearer\s+/i, '').trim()
 
     var body = e.requestInfo().body || {}
 
@@ -86,7 +95,7 @@ routerAdd(
 
     for (var page = 0; page < maxPages && hasMore; page++) {
       var apiUrl =
-        'https://data.saipos.io/v1/sales_status_histories' +
+        'https://data.saipos.io/v1/sales-status-histories' +
         '?p_date_column_filter=shift_date' +
         '&p_filter_date_start=' +
         encodeURIComponent(pFilterDateStart) +
