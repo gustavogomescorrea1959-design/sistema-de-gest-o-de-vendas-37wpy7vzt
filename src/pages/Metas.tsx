@@ -85,7 +85,7 @@ export default function Metas() {
       }
 
       // Auto calc ticket if orders or revenue changes and standard ticket wasn't manually edited this keystroke
-      if ((field === 'goal_orders' || field === 'goal_revenue') && field !== 'standard_ticket') {
+      if (field === 'goal_orders' || field === 'goal_revenue') {
         const o = Number(updated.goal_orders) || 0
         const r = Number(updated.goal_revenue) || 0
         updated.standard_ticket = o > 0 ? r / o : 0

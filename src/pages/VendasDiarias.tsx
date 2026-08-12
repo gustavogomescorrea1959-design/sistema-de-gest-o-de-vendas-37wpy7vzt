@@ -152,7 +152,7 @@ export default function VendasDiarias() {
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
-          <ImportSalesButton onImported={() => loadData(date)} />
+          <ImportSalesButton onSuccess={() => loadData(date)} />
           <Popover>
             <PopoverTrigger asChild>
               <Button

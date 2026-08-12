@@ -11,7 +11,6 @@ const CHANNEL_MAP: Record<string, string> = {
   'cardapio web': 'Cardápio Web',
   '99food': '99Food',
   '99 food': '99Food',
-  '99food': '99Food',
   whatsapp: 'WhatsApp',
   telefone: 'Telefone',
   'central de pedidos': 'Central de Pedidos',
