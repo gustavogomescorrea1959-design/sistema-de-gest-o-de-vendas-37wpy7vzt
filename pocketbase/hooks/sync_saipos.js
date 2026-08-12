@@ -87,6 +87,34 @@ routerAdd(
       return parseFloat(s) || 0
     }
 
+    // Extrai o array de items da resposta da Saipos, tentando múltiplos níveis
+    // de aninhamento comuns em APIs REST (PostgREST, etc.). Ordem: mais aninhado
+    // primeiro, depois níveis menores, por último array direto.
+    function extractItems(json) {
+      if (Array.isArray(json)) return json
+      if (!json || typeof json !== 'object') return []
+      var candidates = [
+        json.data && json.data.data,
+        json.data && json.data.results,
+        json.data && json.data.items,
+        json.data,
+        json.items,
+        json.results,
+        json.sales,
+        json.vendas,
+        json.rows,
+      ]
+      for (var i = 0; i < candidates.length; i++) {
+        if (Array.isArray(candidates[i])) return candidates[i]
+      }
+      // Última tentativa: qualquer array no primeiro nível do objeto
+      var keys = Object.keys(json)
+      for (var k = 0; k < keys.length; k++) {
+        if (Array.isArray(json[keys[k]])) return json[keys[k]]
+      }
+      return []
+    }
+
     // Realiza a requisição à API do Saipos com retry automático (até 3 tentativas)
     // quando a resposta indicar erro PGRST003 ("Timed out acquiring connection
     // from connection pool"). Aguarda 2s entre tentativas.
@@ -183,6 +211,7 @@ routerAdd(
     var limit = 300
     var hasMore = true
     var maxPages = 500
+    var firstPageDiagnostic = null
 
     for (var page = 0; page < maxPages && hasMore; page++) {
       var apiUrl =
@@ -219,12 +248,29 @@ routerAdd(
         return e.json(502, { error: 'Erro na API do Saipos (HTTP ' + res.statusCode + ')' })
       }
 
-      var data = res.json || {}
-      var items =
-        data.data || data.items || data.sales || data.vendas || data.results || data.rows || []
-      if (!Array.isArray(items)) {
-        if (Array.isArray(data)) items = data
-        else items = []
+      var items = extractItems(res.json)
+
+      // Captura diagnóstico da primeira página para retornar no JSON de resposta
+      // (além do log) — assim o frontend consegue exibir a estrutura real da
+      // resposta da Saipos mesmo quando os logs não aparecem no stream de hooks.
+      if (page === 0) {
+        var rj0 = res.json
+        var rjType0 = Array.isArray(rj0) ? 'array' : rj0 === null ? 'null' : typeof rj0
+        var topKeys0 = rj0 && typeof rj0 === 'object' && !Array.isArray(rj0) ? Object.keys(rj0) : []
+        var rawSnippet0 = ''
+        if (items.length === 0) {
+          try {
+            if (res.body) rawSnippet0 = new TextDecoder().decode(res.body).substring(0, 500)
+          } catch (_) {}
+        }
+        firstPageDiagnostic = {
+          statusCode: res.statusCode,
+          responseType: rjType0,
+          topLevelKeys: topKeys0,
+          itemsLength: items.length,
+          rawBodySnippet: rawSnippet0,
+        }
+        $app.logger().warn('Saipos sync diagnóstico: ' + JSON.stringify(firstPageDiagnostic))
       }
 
       if (items.length === 0) {
@@ -337,6 +383,7 @@ routerAdd(
       insertedCount: inserted,
       updatedCount: updated,
       skippedCount: skipped,
+      diagnostic: firstPageDiagnostic || null,
     })
   },
   $apis.requireAuth(),

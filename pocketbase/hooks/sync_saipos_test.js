@@ -194,6 +194,56 @@ routerAdd(
       })
     }
     if (res.statusCode >= 200 && res.statusCode < 300) {
+      // Extrai items tentando múltiplos níveis de aninhamento comuns em APIs
+      // REST (PostgREST, etc.). Ordem: mais aninhado primeiro.
+      function extractItemsTest(json) {
+        if (Array.isArray(json)) return json
+        if (!json || typeof json !== 'object') return []
+        var candidates = [
+          json.data && json.data.data,
+          json.data && json.data.results,
+          json.data && json.data.items,
+          json.data,
+          json.items,
+          json.results,
+          json.sales,
+          json.vendas,
+          json.rows,
+        ]
+        for (var i = 0; i < candidates.length; i++) {
+          if (Array.isArray(candidates[i])) return candidates[i]
+        }
+        var keys = Object.keys(json)
+        for (var k = 0; k < keys.length; k++) {
+          if (Array.isArray(json[keys[k]])) return json[keys[k]]
+        }
+        return []
+      }
+      var testItems = extractItemsTest(res.json)
+
+      // Diagnóstico: estrutura da resposta da Saipos. Retornado no JSON (além
+      // do log) para o frontend conseguir exibi-lo mesmo quando os logs não
+      // aparecem no stream de hooks.
+      var rjType = Array.isArray(res.json) ? 'array' : res.json === null ? 'null' : typeof res.json
+      var topKeys =
+        res.json && typeof res.json === 'object' && !Array.isArray(res.json)
+          ? Object.keys(res.json)
+          : []
+      var rawSnippet = ''
+      if (testItems.length === 0) {
+        try {
+          if (res.body) rawSnippet = new TextDecoder().decode(res.body).substring(0, 500)
+        } catch (_) {}
+      }
+      var diagnostic = {
+        statusCode: res.statusCode,
+        responseType: rjType,
+        topLevelKeys: topKeys,
+        itemsLength: testItems.length,
+        rawBodySnippet: rawSnippet,
+      }
+      $app.logger().warn('Saipos test diagnóstico: ' + JSON.stringify(diagnostic))
+
       return e.json(200, {
         valid: true,
         message: 'Token válido',
@@ -202,6 +252,7 @@ routerAdd(
         responseBody: bodyStr,
         requestUrl: testUrl,
         data: res.json || null,
+        diagnostic: diagnostic,
       })
     }
     return e.json(200, {

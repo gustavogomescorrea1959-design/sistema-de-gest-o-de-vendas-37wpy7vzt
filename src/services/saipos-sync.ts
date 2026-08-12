@@ -1,10 +1,19 @@
 import pb from '@/lib/pocketbase/client'
 
+export interface SaiposDiagnostic {
+  statusCode?: number
+  responseType?: string
+  topLevelKeys?: string[]
+  itemsLength?: number
+  rawBodySnippet?: string
+}
+
 export interface SyncSaiposResult {
   success: boolean
   insertedCount: number
   updatedCount: number
   skippedCount: number
+  diagnostic?: SaiposDiagnostic | null
 }
 
 export interface SaiposTokenTest {
@@ -14,6 +23,7 @@ export interface SaiposTokenTest {
   responseBody?: string
   requestUrl?: string
   data?: unknown
+  diagnostic?: SaiposDiagnostic | null
   errorType?: 'timeout' | 'connection' | 'auth' | 'notfound' | 'rate' | 'other'
 }
 

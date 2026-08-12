@@ -132,10 +132,30 @@ export function SyncSaiposDialog({ open, onOpenChange, onSuccess }: SyncSaiposDi
         format(date.from, 'yyyy-MM-dd'),
         format(date.to, 'yyyy-MM-dd'),
       )
-      toast({
-        title: 'Sincronização concluída!',
-        description: `${result.insertedCount} novo(s), ${result.updatedCount} atualizado(s), ${result.skippedCount} pulado(s).`,
-      })
+
+      const totalSynced =
+        (result.insertedCount || 0) + (result.updatedCount || 0) + (result.skippedCount || 0)
+      const diag = result.diagnostic
+
+      // Quando a sincronização retorna 0 registros, exibe o diagnóstico da
+      // resposta da Saipos na mensagem para o usuário poder nos reportar a
+      // estrutura real recebida da API.
+      if (totalSynced === 0 && diag) {
+        const keys = (diag.topLevelKeys || []).join(', ') || '(nenhuma)'
+        const snippet = diag.rawBodySnippet
+          ? `\nCorpo bruto (até 500 chars):\n${diag.rawBodySnippet}`
+          : ''
+        toast({
+          title: 'Sincronização retornou 0 registros',
+          description: `Status ${diag.statusCode ?? 'N/A'} | tipo: ${diag.responseType ?? 'N/A'} | chaves: [${keys}] | items: ${diag.itemsLength ?? 0}.${snippet}`,
+          variant: 'destructive',
+        })
+      } else {
+        toast({
+          title: 'Sincronização concluída!',
+          description: `${result.insertedCount} novo(s), ${result.updatedCount} atualizado(s), ${result.skippedCount} pulado(s).`,
+        })
+      }
       onSuccess?.()
       onOpenChange(false)
     } catch (err: unknown) {
@@ -241,6 +261,58 @@ export function SyncSaiposDialog({ open, onOpenChange, onSuccess }: SyncSaiposDi
                     </>
                   )}
                 </Button>
+              </AccordionContent>
+            </AccordionItem>
+          </Accordion>
+        )}
+
+        {/* Diagnóstico da resposta da Saipos quando o token é válido mas a
+            extração de items retornou 0 — ajuda a entender o formato real. */}
+        {testResult && testResult.valid && testResult.diagnostic && (
+          <Accordion type="single" collapsible className="w-full">
+            <AccordionItem value="saipos-diag" className="border rounded-md px-3">
+              <AccordionTrigger className="text-sm font-medium py-3">
+                Diagnóstico da resposta Saipos
+              </AccordionTrigger>
+              <AccordionContent className="space-y-2 pt-1">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-medium text-muted-foreground">Código HTTP</span>
+                  <span className="text-xs font-mono bg-muted px-2 py-0.5 rounded">
+                    {testResult.diagnostic.statusCode ?? 'N/A'}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-medium text-muted-foreground">
+                    Tipo da resposta
+                  </span>
+                  <span className="text-xs font-mono bg-muted px-2 py-0.5 rounded">
+                    {testResult.diagnostic.responseType ?? 'N/A'}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-medium text-muted-foreground">Items extraídos</span>
+                  <span className="text-xs font-mono bg-muted px-2 py-0.5 rounded">
+                    {testResult.diagnostic.itemsLength ?? 0}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-xs font-medium text-muted-foreground">
+                    Chaves do objeto (top level)
+                  </span>
+                  <pre className="mt-1 text-xs font-mono bg-muted p-2 rounded overflow-x-auto whitespace-pre-wrap break-all">
+                    {(testResult.diagnostic.topLevelKeys || []).join(', ') || '(nenhuma)'}
+                  </pre>
+                </div>
+                {testResult.diagnostic.rawBodySnippet && (
+                  <div>
+                    <span className="text-xs font-medium text-muted-foreground">
+                      Corpo bruto (até 500 chars)
+                    </span>
+                    <pre className="mt-1 text-xs font-mono bg-muted p-2 rounded overflow-x-auto max-h-40 whitespace-pre-wrap break-all">
+                      {testResult.diagnostic.rawBodySnippet}
+                    </pre>
+                  </div>
+                )}
               </AccordionContent>
             </AccordionItem>
           </Accordion>
