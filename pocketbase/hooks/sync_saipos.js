@@ -87,6 +87,97 @@ routerAdd(
       return parseFloat(s) || 0
     }
 
+    // Realiza a requisição à API do Saipos com retry automático (até 3 tentativas)
+    // quando a resposta indicar erro PGRST003 ("Timed out acquiring connection
+    // from connection pool"). Aguarda 2s entre tentativas.
+    function requestWithRetry(url, timeoutSecs) {
+      var MAX_ATTEMPTS = 3
+      var res = null
+      for (var attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+        res = null
+        try {
+          res = $http.send({
+            url: url,
+            method: 'GET',
+            headers: {
+              accept: 'application/json',
+              Authorization: 'Bearer ' + token,
+            },
+            timeout: timeoutSecs,
+          })
+        } catch (err) {
+          var errMsg = err && err.message ? String(err.message) : ''
+          var lowErr = errMsg.toLowerCase()
+          if (
+            lowErr.indexOf('deadline') >= 0 ||
+            lowErr.indexOf('timeout') >= 0 ||
+            lowErr.indexOf('context deadline') >= 0
+          ) {
+            return {
+              errorResponse: e.json(504, {
+                error:
+                  'Timeout: a API do Saipos demorou demais para responder. Tente um período menor ou tente novamente.',
+              }),
+            }
+          }
+          return {
+            errorResponse: e.json(503, {
+              error: 'Erro de conexão com a API do Saipos: ' + errMsg,
+            }),
+          }
+        }
+
+        // Detecta erro de pool de conexão do PostgREST (PGRST003)
+        var isPoolTimeout = false
+        try {
+          var rj = res.json
+          if (rj && rj.code === 'PGRST003') isPoolTimeout = true
+        } catch (_) {}
+        if (!isPoolTimeout) {
+          var rawBody = ''
+          try {
+            if (res.body) rawBody = new TextDecoder().decode(res.body)
+          } catch (_) {}
+          if (
+            rawBody.indexOf('PGRST003') >= 0 ||
+            rawBody.indexOf('Timed out acquiring connection') >= 0
+          ) {
+            isPoolTimeout = true
+          }
+        }
+
+        if (isPoolTimeout) {
+          if (attempt < MAX_ATTEMPTS - 1) {
+            $app
+              .logger()
+              .warn(
+                'Saipos PGRST003 (pool de conexão) na tentativa ' +
+                  (attempt + 1) +
+                  '/' +
+                  MAX_ATTEMPTS +
+                  ' — retryando em 2s',
+              )
+            sleep(2000)
+            continue
+          }
+          $app
+            .logger()
+            .error('Saipos PGRST003: pool de conexão esgotado após ' + MAX_ATTEMPTS + ' tentativas')
+          return {
+            errorResponse: e.json(503, {
+              error:
+                'A API do Saipos está indisponível no momento (PGRST003: Timed out acquiring connection from connection pool). Tente novamente em alguns instantes.',
+              code: 'PGRST003',
+              retries: MAX_ATTEMPTS,
+            }),
+          }
+        }
+
+        return { res: res }
+      }
+      return { res: res }
+    }
+
     var allRecords = []
     var offset = 0
     var limit = 300
@@ -106,20 +197,9 @@ routerAdd(
         '&p_offset=' +
         offset
 
-      var res
-      try {
-        res = $http.send({
-          url: apiUrl,
-          method: 'GET',
-          headers: {
-            accept: 'application/json',
-            Authorization: 'Bearer ' + token,
-          },
-          timeout: 30,
-        })
-      } catch (err) {
-        return e.json(503, { error: 'Erro de conexão com a API do Saipos: ' + err.message })
-      }
+      var requestResult = requestWithRetry(apiUrl, 60)
+      if (requestResult.errorResponse) return requestResult.errorResponse
+      var res = requestResult.res
 
       if (res.statusCode === 401 || res.statusCode === 403) {
         return e.json(401, { error: 'Token Saipos Inválido' })

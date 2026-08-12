@@ -14,6 +14,7 @@ export interface SaiposTokenTest {
   responseBody?: string
   requestUrl?: string
   data?: unknown
+  errorType?: 'timeout' | 'connection' | 'auth' | 'notfound' | 'rate' | 'other'
 }
 
 export async function syncSaipos(startDate: string, endDate: string): Promise<SyncSaiposResult> {

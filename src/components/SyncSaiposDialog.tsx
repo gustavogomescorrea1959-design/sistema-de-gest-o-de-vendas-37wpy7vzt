@@ -51,6 +51,26 @@ export function SyncSaiposDialog({ open, onOpenChange, onSuccess }: SyncSaiposDi
   const [copied, setCopied] = useState(false)
   const { toast } = useToast()
 
+  // Classifica um resultado de teste de token para exibir a mensagem correta.
+  // Retorna { title, isAuth } — isAuth=true significa que o erro é de token inválido.
+  function describeTestError(result: SaiposTokenTest): { title: string; isAuth: boolean } {
+    const errorType = result.errorType
+    const status = result.statusCode ?? 0
+    if (errorType === 'timeout' || status === 0) {
+      return {
+        title: 'Timeout / API demorou para responder',
+        isAuth: false,
+      }
+    }
+    if (errorType === 'connection') {
+      return { title: 'Erro de conexão com a Saipos', isAuth: false }
+    }
+    if (errorType === 'auth' || status === 401 || status === 403) {
+      return { title: 'Token Saipos Inválido', isAuth: true }
+    }
+    return { title: 'Falha ao validar token', isAuth: false }
+  }
+
   const handleTestToken = async () => {
     setTesting(true)
     setTestResult(null)
@@ -59,15 +79,21 @@ export function SyncSaiposDialog({ open, onOpenChange, onSuccess }: SyncSaiposDi
       setTestResult(result)
       setTokenValid(result.valid)
       if (!result.valid) {
+        const { title } = describeTestError(result)
         toast({
-          title: 'Token Saipos Inválido',
-          description: result.message || 'Token Saipos Inválido',
+          title,
+          description: result.message || title,
           variant: 'destructive',
         })
       }
     } catch {
       setTokenValid(false)
       setTestResult(null)
+      toast({
+        title: 'Erro de conexão com a Saipos',
+        description: 'Não foi possível validar o token. Verifique sua conexão.',
+        variant: 'destructive',
+      })
     } finally {
       setTesting(false)
     }
@@ -114,8 +140,17 @@ export function SyncSaiposDialog({ open, onOpenChange, onSuccess }: SyncSaiposDi
       onOpenChange(false)
     } catch (err: unknown) {
       const e = err as ClientResponseError
-      const message = e?.response?.error || e?.message || 'Erro ao sincronizar com Saipos'
-      toast({ title: 'Erro na sincronização', description: message, variant: 'destructive' })
+      const status = e?.status ?? 0
+      let title = 'Erro na sincronização'
+      let message = e?.response?.error || e?.message || 'Erro ao sincronizar com Saipos'
+      if (status === 504) {
+        title = 'Timeout / API demorou para responder'
+        message =
+          'A API do Saipos demorou demais para responder. Tente um período menor ou tente novamente.'
+      } else if (status === 0 || status === 503) {
+        title = 'Erro de conexão com a Saipos'
+      }
+      toast({ title, description: message, variant: 'destructive' })
     } finally {
       setSyncing(false)
     }
@@ -146,7 +181,9 @@ export function SyncSaiposDialog({ open, onOpenChange, onSuccess }: SyncSaiposDi
           ) : tokenValid === false ? (
             <>
               <AlertCircle className="h-4 w-4 text-red-500" />
-              <span className="text-red-600">Token Saipos Inválido</span>
+              <span className="text-red-600">
+                {testResult ? describeTestError(testResult).title : 'Falha ao validar token'}
+              </span>
               <Button
                 variant="ghost"
                 size="sm"

@@ -70,24 +70,92 @@ routerAdd(
       return ''
     }
 
-    var res
-    try {
-      res = $http.send({
-        url: testUrl,
-        method: 'GET',
-        headers: {
-          accept: 'application/json',
-          Authorization: 'Bearer ' + token,
-        },
-        timeout: 15,
-      })
-    } catch (err) {
+    // Realiza a requisição à API do Saipos com retry automático (até 3
+    // tentativas) quando a resposta indicar erro PGRST003 ("Timed out
+    // acquiring connection from connection pool"). Aguarda 2s entre tentativas.
+    var MAX_ATTEMPTS = 3
+    var res = null
+    var poolTimeoutFinal = false
+    for (var attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+      res = null
+      poolTimeoutFinal = false
+      try {
+        res = $http.send({
+          url: testUrl,
+          method: 'GET',
+          headers: {
+            accept: 'application/json',
+            Authorization: 'Bearer ' + token,
+          },
+          timeout: 30,
+        })
+      } catch (err) {
+        var errMsg = err && err.message ? String(err.message) : ''
+        var lowErr = errMsg.toLowerCase()
+        var isTimeout =
+          lowErr.indexOf('deadline') >= 0 ||
+          lowErr.indexOf('timeout') >= 0 ||
+          lowErr.indexOf('context deadline') >= 0
+        return e.json(200, {
+          valid: false,
+          message: isTimeout
+            ? 'Timeout: a API do Saipos demorou demais para responder.'
+            : 'Erro de conexão com o Saipos: ' + errMsg,
+          statusCode: 0,
+          errorType: isTimeout ? 'timeout' : 'connection',
+          responseBody: '',
+          requestUrl: testUrl,
+        })
+      }
+
+      // Detecta erro de pool de conexão do PostgREST (PGRST003)
+      var isPoolTimeout = false
+      try {
+        var rj = res.json
+        if (rj && rj.code === 'PGRST003') isPoolTimeout = true
+      } catch (_) {}
+      if (!isPoolTimeout) {
+        var poolBody = getResponseBody(res)
+        if (
+          poolBody.indexOf('PGRST003') >= 0 ||
+          poolBody.indexOf('Timed out acquiring connection') >= 0
+        ) {
+          isPoolTimeout = true
+        }
+      }
+
+      if (isPoolTimeout) {
+        if (attempt < MAX_ATTEMPTS - 1) {
+          $app
+            .logger()
+            .warn(
+              'Saipos PGRST003 (pool de conexão) na tentativa ' +
+                (attempt + 1) +
+                '/' +
+                MAX_ATTEMPTS +
+                ' — retryando em 2s',
+            )
+          sleep(2000)
+          continue
+        }
+        $app
+          .logger()
+          .error('Saipos PGRST003: pool de conexão esgotado após ' + MAX_ATTEMPTS + ' tentativas')
+        poolTimeoutFinal = true
+      }
+      break
+    }
+
+    if (poolTimeoutFinal) {
       return e.json(200, {
         valid: false,
-        message: 'Erro de conexão com o Saipos: ' + err.message,
-        statusCode: 0,
-        responseBody: '',
+        message:
+          'A API do Saipos está indisponível no momento (PGRST003: Timed out acquiring connection from connection pool). Tente novamente em alguns instantes.',
+        statusCode: res ? res.statusCode : 0,
+        errorType: 'pool_timeout',
+        responseBody: getResponseBody(res),
         requestUrl: testUrl,
+        retries: MAX_ATTEMPTS,
       })
     }
 
@@ -98,6 +166,7 @@ routerAdd(
         valid: false,
         message: 'Token Saipos Inválido',
         statusCode: res.statusCode,
+        errorType: 'auth',
         responseBody: bodyStr,
         requestUrl: testUrl,
       })
@@ -108,6 +177,7 @@ routerAdd(
         valid: false,
         message: 'Endpoint não encontrado na API do Saipos',
         statusCode: res.statusCode,
+        errorType: 'notfound',
         responseBody: bodyStr,
         requestUrl: testUrl,
       })
@@ -117,6 +187,7 @@ routerAdd(
         valid: true,
         message: 'Token válido (limite de requisições atingido)',
         statusCode: res.statusCode,
+        errorType: 'rate',
         responseBody: bodyStr,
         requestUrl: testUrl,
         data: res.json || null,
@@ -127,6 +198,7 @@ routerAdd(
         valid: true,
         message: 'Token válido',
         statusCode: res.statusCode,
+        errorType: 'other',
         responseBody: bodyStr,
         requestUrl: testUrl,
         data: res.json || null,
@@ -136,6 +208,7 @@ routerAdd(
       valid: false,
       message: 'Erro na API do Saipos (HTTP ' + res.statusCode + ')',
       statusCode: res.statusCode,
+      errorType: 'other',
       responseBody: bodyStr,
       requestUrl: testUrl,
     })
