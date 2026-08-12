@@ -29,7 +29,12 @@ import {
   Check,
 } from 'lucide-react'
 import { ClientResponseError } from 'pocketbase'
-import { syncSaipos, testSaiposToken, type SaiposTokenTest } from '@/services/saipos-sync'
+import {
+  syncSaipos,
+  testSaiposToken,
+  type SaiposTokenTest,
+  type SaiposDiagnostic,
+} from '@/services/saipos-sync'
 import { useToast } from '@/hooks/use-toast'
 import { cn } from '@/lib/utils'
 
@@ -48,6 +53,7 @@ export function SyncSaiposDialog({ open, onOpenChange, onSuccess }: SyncSaiposDi
   const [testing, setTesting] = useState(false)
   const [tokenValid, setTokenValid] = useState<boolean | null>(null)
   const [testResult, setTestResult] = useState<SaiposTokenTest | null>(null)
+  const [syncDiagnostic, setSyncDiagnostic] = useState<SaiposDiagnostic | null>(null)
   const [copied, setCopied] = useState(false)
   const { toast } = useToast()
 
@@ -127,6 +133,7 @@ export function SyncSaiposDialog({ open, onOpenChange, onSuccess }: SyncSaiposDi
       return
     }
     setSyncing(true)
+    setSyncDiagnostic(null)
     try {
       const result = await syncSaipos(
         format(date.from, 'yyyy-MM-dd'),
@@ -142,14 +149,16 @@ export function SyncSaiposDialog({ open, onOpenChange, onSuccess }: SyncSaiposDi
       // estrutura real recebida da API.
       if (totalSynced === 0 && diag) {
         const keys = (diag.topLevelKeys || []).join(', ') || '(nenhuma)'
+        const itemKeys = (diag.firstItemKeys || []).join(', ') || '(nenhuma)'
         const snippet = diag.rawBodySnippet
           ? `\nCorpo bruto (até 500 chars):\n${diag.rawBodySnippet}`
           : ''
         toast({
           title: 'Sincronização retornou 0 registros',
-          description: `Status ${diag.statusCode ?? 'N/A'} | tipo: ${diag.responseType ?? 'N/A'} | chaves: [${keys}] | items: ${diag.itemsLength ?? 0}.${snippet}`,
+          description: `Status ${diag.statusCode ?? 'N/A'} | tipo: ${diag.responseType ?? 'N/A'} | chaves: [${keys}] | items: ${diag.itemsLength ?? 0} | chaves do 1º item: [${itemKeys}].${snippet}`,
           variant: 'destructive',
         })
+        setSyncDiagnostic(diag)
       } else {
         toast({
           title: 'Sincronização concluída!',
@@ -170,6 +179,26 @@ export function SyncSaiposDialog({ open, onOpenChange, onSuccess }: SyncSaiposDi
       } else if (status === 0 || status === 503) {
         title = 'Erro de conexão com a Saipos'
       }
+
+      // Erro de validação ao salvar (ex.: revenue/average_ticket em branco):
+      // exibe as chaves do 1º item extraído no toast e no accordion de
+      // diagnóstico para o time poder ajustar o mapeamento de campos.
+      const resp = (e?.response || {}) as {
+        diagnostic?: SaiposDiagnostic | null
+        validationError?: boolean
+      }
+      const diag = resp.diagnostic
+      const itemKeys = (diag?.firstItemKeys || []).join(', ')
+      if (resp.validationError && diag && itemKeys) {
+        title = 'Falha ao salvar vendas (validação)'
+        message = `${message}\nChaves do 1º item extraído: ${itemKeys}`
+        setSyncDiagnostic(diag)
+      } else if (diag && itemKeys) {
+        // Outros erros, mas com diagnóstico disponível — também ajuda mostrar.
+        message = `${message}\nChaves do 1º item extraído: ${itemKeys}`
+        setSyncDiagnostic(diag)
+      }
+
       toast({ title, description: message, variant: 'destructive' })
     } finally {
       setSyncing(false)
@@ -303,6 +332,16 @@ export function SyncSaiposDialog({ open, onOpenChange, onSuccess }: SyncSaiposDi
                     {(testResult.diagnostic.topLevelKeys || []).join(', ') || '(nenhuma)'}
                   </pre>
                 </div>
+                {(testResult.diagnostic.firstItemKeys || []).length > 0 && (
+                  <div>
+                    <span className="text-xs font-medium text-muted-foreground">
+                      Chaves do 1º item extraído
+                    </span>
+                    <pre className="mt-1 text-xs font-mono bg-muted p-2 rounded overflow-x-auto whitespace-pre-wrap break-all">
+                      {(testResult.diagnostic.firstItemKeys || []).join(', ')}
+                    </pre>
+                  </div>
+                )}
                 {testResult.diagnostic.rawBodySnippet && (
                   <div>
                     <span className="text-xs font-medium text-muted-foreground">
@@ -310,6 +349,71 @@ export function SyncSaiposDialog({ open, onOpenChange, onSuccess }: SyncSaiposDi
                     </span>
                     <pre className="mt-1 text-xs font-mono bg-muted p-2 rounded overflow-x-auto max-h-40 whitespace-pre-wrap break-all">
                       {testResult.diagnostic.rawBodySnippet}
+                    </pre>
+                  </div>
+                )}
+              </AccordionContent>
+            </AccordionItem>
+          </Accordion>
+        )}
+
+        {/* Diagnóstico da sincronização exibido quando ela retorna 0 registros
+            (HTTP 200, items extraídos, mas nenhum mapeado para daily_sales) ou
+            quando a sincronização extrai itens mas falha ao salvar por erro de
+            validação (ex.: revenue/average_ticket em branco). Mostra as chaves
+            do primeiro item para o time saber como mapear. */}
+        {syncDiagnostic && (
+          <Accordion type="single" collapsible className="w-full">
+            <AccordionItem value="sync-diag" className="border rounded-md px-3">
+              <AccordionTrigger className="text-sm font-medium py-3">
+                Diagnóstico da resposta Saipos
+              </AccordionTrigger>
+              <AccordionContent className="space-y-2 pt-1">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-medium text-muted-foreground">Código HTTP</span>
+                  <span className="text-xs font-mono bg-muted px-2 py-0.5 rounded">
+                    {syncDiagnostic.statusCode ?? 'N/A'}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-medium text-muted-foreground">
+                    Tipo da resposta
+                  </span>
+                  <span className="text-xs font-mono bg-muted px-2 py-0.5 rounded">
+                    {syncDiagnostic.responseType ?? 'N/A'}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-medium text-muted-foreground">Items extraídos</span>
+                  <span className="text-xs font-mono bg-muted px-2 py-0.5 rounded">
+                    {syncDiagnostic.itemsLength ?? 0}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-xs font-medium text-muted-foreground">
+                    Chaves do objeto (top level)
+                  </span>
+                  <pre className="mt-1 text-xs font-mono bg-muted p-2 rounded overflow-x-auto whitespace-pre-wrap break-all">
+                    {(syncDiagnostic.topLevelKeys || []).join(', ') || '(nenhuma)'}
+                  </pre>
+                </div>
+                {(syncDiagnostic.firstItemKeys || []).length > 0 && (
+                  <div>
+                    <span className="text-xs font-medium text-muted-foreground">
+                      Chaves do 1º item extraído
+                    </span>
+                    <pre className="mt-1 text-xs font-mono bg-muted p-2 rounded overflow-x-auto whitespace-pre-wrap break-all">
+                      {(syncDiagnostic.firstItemKeys || []).join(', ')}
+                    </pre>
+                  </div>
+                )}
+                {syncDiagnostic.rawBodySnippet && (
+                  <div>
+                    <span className="text-xs font-medium text-muted-foreground">
+                      Corpo bruto (até 500 chars)
+                    </span>
+                    <pre className="mt-1 text-xs font-mono bg-muted p-2 rounded overflow-x-auto max-h-40 whitespace-pre-wrap break-all">
+                      {syncDiagnostic.rawBodySnippet}
                     </pre>
                   </div>
                 )}

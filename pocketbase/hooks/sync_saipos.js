@@ -268,6 +268,7 @@ routerAdd(
           responseType: rjType0,
           topLevelKeys: topKeys0,
           itemsLength: items.length,
+          firstItemKeys: items.length > 0 ? Object.keys(items[0]) : [],
           rawBodySnippet: rawSnippet0,
         }
         $app.logger().warn('Saipos sync diagnóstico: ' + JSON.stringify(firstPageDiagnostic))
@@ -360,21 +361,47 @@ routerAdd(
         existing = $app.findRecordsByFilter('daily_sales', filter, '', 1, 0)
       } catch (_) {}
 
-      if (existing.length > 0) {
-        existing[0].set('orders', g.orders)
-        existing[0].set('revenue', Math.round(g.revenue * 100) / 100)
-        existing[0].set('average_ticket', avg)
-        $app.save(existing[0])
-        updated++
-      } else {
-        var nr = new Record(collection)
-        nr.set('date', g.date)
-        nr.set('channel', g.channel)
-        nr.set('orders', g.orders)
-        nr.set('revenue', Math.round(g.revenue * 100) / 100)
-        nr.set('average_ticket', avg)
-        $app.save(nr)
-        inserted++
+      try {
+        if (existing.length > 0) {
+          existing[0].set('orders', g.orders)
+          existing[0].set('revenue', Math.round(g.revenue * 100) / 100)
+          existing[0].set('average_ticket', avg)
+          $app.save(existing[0])
+          updated++
+        } else {
+          var nr = new Record(collection)
+          nr.set('date', g.date)
+          nr.set('channel', g.channel)
+          nr.set('orders', g.orders)
+          nr.set('revenue', Math.round(g.revenue * 100) / 100)
+          nr.set('average_ticket', avg)
+          $app.save(nr)
+          inserted++
+        }
+      } catch (saveErr) {
+        // Falha de validação ao salvar (ex.: revenue/average_ticket em branco
+        // porque o mapeamento de campos da Saipos está divergente). Retorna o
+        // diagnóstico da primeira página — incluindo as chaves do 1º item
+        // extraído — para o frontend poder exibi-las ao usuário e o time
+        // ajustar o mapeamento.
+        var errMsg = saveErr && saveErr.message ? String(saveErr.message) : 'Erro desconhecido'
+        $app
+          .logger()
+          .error(
+            'Saipos sync: falha ao salvar daily_sales (validação): ' +
+              errMsg +
+              ' | diagnóstico: ' +
+              JSON.stringify(firstPageDiagnostic),
+          )
+        return e.json(400, {
+          error:
+            'Falha ao salvar vendas: validação falhou (' +
+            errMsg +
+            '). Verifique as chaves do 1º item extraído para ajustar o mapeamento de campos.',
+          validationError: true,
+          validationMessage: errMsg,
+          diagnostic: firstPageDiagnostic || null,
+        })
       }
     }
 

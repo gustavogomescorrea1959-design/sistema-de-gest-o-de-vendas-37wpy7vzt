@@ -5,6 +5,7 @@ export interface SaiposDiagnostic {
   responseType?: string
   topLevelKeys?: string[]
   itemsLength?: number
+  firstItemKeys?: string[]
   rawBodySnippet?: string
 }
 
@@ -14,6 +15,11 @@ export interface SyncSaiposResult {
   updatedCount: number
   skippedCount: number
   diagnostic?: SaiposDiagnostic | null
+  // Present quando a sincronização extrai itens mas falha ao salvar por erro
+  // de validação (ex.: revenue/average_ticket em branco).
+  validationError?: boolean
+  validationMessage?: string
+  error?: string
 }
 
 export interface SaiposTokenTest {

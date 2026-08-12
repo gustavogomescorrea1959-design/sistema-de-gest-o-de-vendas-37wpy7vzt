@@ -240,6 +240,7 @@ routerAdd(
         responseType: rjType,
         topLevelKeys: topKeys,
         itemsLength: testItems.length,
+        firstItemKeys: testItems.length > 0 ? Object.keys(testItems[0]) : [],
         rawBodySnippet: rawSnippet,
       }
       $app.logger().warn('Saipos test diagnóstico: ' + JSON.stringify(diagnostic))
