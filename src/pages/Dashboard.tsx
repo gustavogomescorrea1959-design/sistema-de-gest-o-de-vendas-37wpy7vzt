@@ -33,7 +33,9 @@ import { cn } from '@/lib/utils'
 import { getWorkingDaysInMonth, getWorkingDaysPassed } from '@/lib/working-days'
 import { SyncSaiposButton } from '@/components/SyncSaiposButton'
 
-const DELIVERY_CHANNELS = CHANNELS.filter((ch) => ch !== 'Loja / Restaurante')
+const DELIVERY_CHANNELS = CHANNELS.filter(
+  (ch) => ch !== 'Loja / Restaurante' && ch !== 'Desconhecido',
+)
 
 const CHANNEL_COLORS: Record<string, string> = {
   'Loja / Restaurante': 'hsl(var(--chart-1))',
@@ -43,6 +45,7 @@ const CHANNEL_COLORS: Record<string, string> = {
   '99Food': 'hsl(var(--chart-5))',
   WhatsApp: 'hsl(var(--chart-6))',
   Telefone: 'hsl(var(--chart-7))',
+  Desconhecido: 'hsl(var(--muted-foreground))',
 }
 
 export default function Dashboard() {

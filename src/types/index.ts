@@ -8,6 +8,7 @@ export const CHANNELS = [
   '99Food',
   'WhatsApp',
   'Telefone',
+  'Desconhecido',
 ] as const
 
 export type Channel = (typeof CHANNELS)[number]

@@ -13,6 +13,7 @@ import {
   Bike,
   MessageCircle,
   Phone,
+  HelpCircle,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -34,6 +35,7 @@ const ICONS: Record<Channel, React.ElementType> = {
   '99Food': Bike,
   WhatsApp: MessageCircle,
   Telefone: Phone,
+  Desconhecido: HelpCircle,
 }
 
 type FormData = Record<Channel, { id?: string; orders: string; revenue: string }>
