@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-13T18:49:05.178Z",
+  "generatedAt": "2026-08-13T19:07:39.307Z",
   "collections": [
     {
       "name": "users",
@@ -67,7 +67,8 @@
             "Cardápio Web",
             "99Food",
             "WhatsApp",
-            "Telefone"
+            "Telefone",
+            "Desconhecido"
           ]
         },
         {
@@ -146,7 +147,8 @@
             "Cardápio Web",
             "99Food",
             "WhatsApp",
-            "Telefone"
+            "Telefone",
+            "Desconhecido"
           ]
         },
         {
