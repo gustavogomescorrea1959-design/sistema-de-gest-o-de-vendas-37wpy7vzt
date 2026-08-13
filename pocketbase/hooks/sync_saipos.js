@@ -100,6 +100,38 @@ routerAdd(
       return ''
     }
 
+    // Extrai o canal de venda de um item do /v1/search_sales.
+    // 1) partner_sale.desc_store_partner  — partner_sale é um OBJETO (não string)
+    //    e traz o nome do canal ("iFood", "WhatsApp", "Cardápio Web", ...).
+    // 2) id_sale_type (2=Retirada, 3=Salão, 4=Ficha => Loja / Restaurante).
+    // 3) campos legados (channel, canal, origem, ...).
+    // 4) "Desconhecido".
+    function extractChannel(entry) {
+      var ps = entry.partner_sale
+      if (ps && typeof ps === 'object') {
+        var pn = ps.desc_store_partner || ps.partner || ps.name || ''
+        if (pn) {
+          var mapped = mapChannel(pn)
+          if (mapped) return mapped
+        }
+      }
+      var st = entry.id_sale_type
+      if (st === 2 || st === 3 || st === 4) return 'Loja / Restaurante'
+      var legacy =
+        entry.channel ||
+        entry.channel_name ||
+        entry.canal_venda ||
+        entry.canal ||
+        entry.origem ||
+        entry.sales_channel ||
+        ''
+      if (legacy) {
+        var lm = mapChannel(legacy)
+        if (lm) return lm
+      }
+      return 'Desconhecido'
+    }
+
     function parseDateStr(raw) {
       var s = (raw || '').trim()
       var m = s.match(/(\d{2})\/(\d{2})\/(\d{4})/)
@@ -109,14 +141,18 @@ routerAdd(
       return ''
     }
 
+    // Garante que NUNCA retorna NaN/Infinity — sempre um número finito (ou 0).
+    // PocketBase rejeita NaN em campos number required como "cannot be blank".
     function parseNum(raw) {
-      if (typeof raw === 'number') return raw
-      var s = (raw || '').toString().trim()
+      if (typeof raw === 'number') return isFinite(raw) ? raw : 0
+      if (raw == null) return 0
+      var s = String(raw).trim()
       if (!s) return 0
       s = s.replace(/[R$\s]/g, '')
       if (s.indexOf(',') >= 0 && s.indexOf('.') >= 0) s = s.replace(/\./g, '').replace(',', '.')
       else if (s.indexOf(',') >= 0) s = s.replace(',', '.')
-      return parseFloat(s) || 0
+      var n = parseFloat(s)
+      return isFinite(n) ? n : 0
     }
 
     // Extrai o array de items da resposta da Saipos, tentando múltiplos níveis
@@ -474,66 +510,36 @@ routerAdd(
         )
           continue
 
-        // Canal: preferimos desc_store_partner (nome do parceiro/canal no
-        // search_sales). Depois id_sale_type (1=Entrega,2=Retirada,3=Salão,
-        // 4=Ficha) como fallback para classificar loja vs. entrega.
-        var rawCh =
-          (entry.partner_sale &&
-            (entry.partner_sale.desc_store_partner || entry.partner_sale.partner)) ||
-          entry.channel ||
-          entry.channel_name ||
-          entry.canal_venda ||
-          entry.canal ||
-          entry.origem ||
-          entry.sales_channel ||
-          ''
-        var channel = mapChannel(rawCh)
-        if (!channel) {
-          // Fallback pelo tipo de venda.
-          var st = entry.id_sale_type
-          if (st === 1)
-            channel = '' // entrega — tentaremos mapear abaixo
-          else if (st === 2 || st === 3 || st === 4) channel = 'Loja / Restaurante'
-        }
-        if (!channel) {
-          // Tenta extrair canal do nome do parceiro (desc_store_partner) de
-          // forma mais flexível, ou marca como Desconhecido.
-          var partnerName = ''
-          if (entry.partner_sale && entry.partner_sale.desc_store_partner) {
-            partnerName = entry.partner_sale.desc_store_partner
-          }
-          channel = mapChannel(partnerName) || 'Desconhecido'
-        }
+        // Canal: partner_sale é um OBJETO com desc_store_partner (nome do
+        // canal: "iFood", "WhatsApp", "Cardápio Web", ...). Depois id_sale_type
+        // e por fim "Desconhecido".
+        var channel = extractChannel(entry)
 
-        // Valor: total_amount é o total da venda no search_sales. Pode estar
-        // dentro do sub-objeto `totals` ou direto no item (formato antigo).
-        var total = parseNum(
-          (entry.totals && (entry.totals.total_amount || entry.totals.total)) ||
-            entry.total_amount ||
-            entry.revenue ||
-            entry.total ||
-            entry.amount ||
-            entry.valor_total ||
-            entry.valor ||
-            entry.receita ||
-            0,
-        )
-        // Pedidos: cada venda == 1 pedido no search_sales.
-        var recOrders = parseNum(
-          entry.orders ||
-            entry.order_count ||
-            entry.count ||
-            entry.quantidade_pedidos ||
-            entry.quantidade ||
-            0,
-        )
+        // Receita: total_amount (número) é o total da venda. Se for
+        // null/undefined/0, caímos para total_amount_items como fallback.
+        var total = parseNum(entry.total_amount)
+        if (!total) total = parseNum(entry.total_amount_items || 0)
+
+        // Ticket médio da venda: se houver campo `ticket`, usamos ele; senão o
+        // próprio total da venda representa o ticket médio unitário.
+        var saleTicket = parseNum(entry.ticket)
+        if (!saleTicket) saleTicket = total
+
         var key = dateStr + '|' + channel
 
         if (!groups[key]) {
-          groups[key] = { date: dateStr, channel: channel, orders: 0, revenue: 0 }
+          groups[key] = {
+            date: dateStr,
+            channel: channel,
+            orders: 0,
+            revenue: 0,
+            ticketSum: 0,
+          }
         }
-        groups[key].orders += recOrders > 0 ? recOrders : 1
+        // Cada venda não cancelada == 1 pedido.
+        groups[key].orders += 1
         groups[key].revenue += total
+        groups[key].ticketSum += saleTicket
       }
     }
 
@@ -557,7 +563,20 @@ routerAdd(
 
     for (var j = 0; j < keys.length; j++) {
       var g = groups[keys[j]]
-      var avg = g.orders > 0 ? Math.round((g.revenue / g.orders) * 100) / 100 : 0
+
+      // Garantias anti-NaN/Infinity: revenue, average_ticket e orders nunca
+      // podem chegar NaN/blank ao PocketBase (senão: "cannot be blank").
+      var revenue = g.revenue
+      if (!isFinite(revenue) || isNaN(revenue)) revenue = 0
+      revenue = Math.round(revenue * 100) / 100
+
+      var avg = g.orders > 0 ? g.ticketSum / g.orders : 0
+      if (!isFinite(avg) || isNaN(avg)) avg = 0
+      avg = Math.round(avg * 100) / 100
+
+      var orders = g.orders
+      if (!isFinite(orders) || isNaN(orders)) orders = 0
+
       var filter = "date = '" + g.date + "' && channel = '" + g.channel + "'"
       var existing = []
 
@@ -567,8 +586,8 @@ routerAdd(
 
       try {
         if (existing.length > 0) {
-          existing[0].set('orders', g.orders)
-          existing[0].set('revenue', Math.round(g.revenue * 100) / 100)
+          existing[0].set('orders', orders)
+          existing[0].set('revenue', revenue)
           existing[0].set('average_ticket', avg)
           $app.save(existing[0])
           updated++
@@ -576,14 +595,34 @@ routerAdd(
           var nr = new Record(collection)
           nr.set('date', g.date)
           nr.set('channel', g.channel)
-          nr.set('orders', g.orders)
-          nr.set('revenue', Math.round(g.revenue * 100) / 100)
+          nr.set('orders', orders)
+          nr.set('revenue', revenue)
           nr.set('average_ticket', avg)
           $app.save(nr)
           inserted++
         }
       } catch (saveErr) {
         var errMsg = saveErr && saveErr.message ? String(saveErr.message) : 'Erro desconhecido'
+        // Log detalhado do registro que falhou na validação.
+        $app
+          .logger()
+          .warn(
+            'Saipos sync: validação falhou ao salvar daily_sales -> ' +
+              'date=' +
+              g.date +
+              ' | channel=' +
+              g.channel +
+              ' | orders=' +
+              orders +
+              ' | revenue=' +
+              revenue +
+              ' | average_ticket=' +
+              avg +
+              ' | ticketSum=' +
+              g.ticketSum +
+              ' | erro=' +
+              errMsg,
+          )
         $app
           .logger()
           .error(
@@ -596,9 +635,24 @@ routerAdd(
           error:
             'Falha ao salvar vendas: validação falhou (' +
             errMsg +
-            '). Verifique as chaves do 1º item extraído para ajustar o mapeamento de campos.',
+            '). Registro: date=' +
+            g.date +
+            ', channel=' +
+            g.channel +
+            ', revenue=' +
+            revenue +
+            ', average_ticket=' +
+            avg +
+            '.',
           validationError: true,
           validationMessage: errMsg,
+          failedRecord: {
+            date: g.date,
+            channel: g.channel,
+            orders: orders,
+            revenue: revenue,
+            average_ticket: avg,
+          },
           diagnostic: firstPageDiagnostic || null,
         })
       }

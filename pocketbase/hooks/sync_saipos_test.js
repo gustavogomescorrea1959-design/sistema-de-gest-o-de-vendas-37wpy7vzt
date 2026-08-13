@@ -252,6 +252,28 @@ routerAdd(
             ' items. Chaves do 1º history: ' +
             JSON.stringify(firstHistoryKeysTest),
         )
+
+      // Pré-visualiza como o hook principal mapearia o 1º item real do
+      // /v1/search_sales (partner_sale como objeto, total_amount, ticket,
+      // canceled, shift_date). Ajuda a debugar o mapeamento sem rodar o sync.
+      var sample = null
+      if (testItems.length > 0) {
+        var s0 = testItems[0]
+        var ps0 = s0.partner_sale
+        sample = {
+          shift_date: s0.shift_date,
+          canceled: s0.canceled,
+          total_amount: s0.total_amount,
+          total_amount_items: s0.total_amount_items,
+          ticket: s0.ticket,
+          id_sale_type: s0.id_sale_type,
+          partner_sale_type: ps0 && typeof ps0 === 'object' ? 'object' : typeof ps0,
+          partner_sale_desc: ps0 && ps0.desc_store_partner,
+          partner_sale_partner: ps0 && ps0.partner,
+        }
+        $app.logger().warn('Saipos test: mapeamento do 1º item -> ' + JSON.stringify(sample))
+      }
+
       var diagnostic = {
         statusCode: res.statusCode,
         responseType: rjType,
@@ -260,6 +282,7 @@ routerAdd(
         firstItemKeys: testItems.length > 0 ? Object.keys(testItems[0]) : [],
         historyKeys: firstHistoryKeysTest,
         totalHistories: totalHistoriesTest,
+        sampleMapping: sample,
         rawBodySnippet: rawSnippet,
       }
       $app.logger().warn('Saipos test diagnóstico: ' + JSON.stringify(diagnostic))
