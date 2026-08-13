@@ -733,6 +733,7 @@ routerAdd(
       segments: segments.length,
       totalSales: allRecords.length,
       diagnostic: firstPageDiagnostic || null,
+      unmappedPartners: Object.keys(unmappedPartners),
     })
   },
   $apis.requireAuth(),

@@ -26,6 +26,9 @@ export interface SyncSaiposResult {
   segments?: number
   /** Total de vendas brutas retornadas pelo /v1/search_sales. */
   totalSales?: number
+  /** Nomes de parceiros (desc_store_partner) não reconhecidos pelo mapChannel.
+   * Apenas diagnóstico informativo — os registros correspondentes são pulados. */
+  unmappedPartners?: string[]
   diagnostic?: SaiposDiagnostic | null
   // Present quando a sincronização extrai itens mas falha ao salvar por erro
   // de validação (ex.: revenue/average_ticket em branco).

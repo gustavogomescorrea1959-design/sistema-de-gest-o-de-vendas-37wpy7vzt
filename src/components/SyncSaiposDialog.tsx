@@ -163,11 +163,14 @@ export function SyncSaiposDialog({ open, onOpenChange, onSuccess }: SyncSaiposDi
         })
         setSyncDiagnostic(diag)
       } else {
+        const unmapped = result.unmappedPartners || []
+        const unmappedLine =
+          unmapped.length > 0 ? `\n⚠️ Parceiros não mapeados: ${unmapped.join(', ')}` : ''
         toast({
           title: 'Sincronização concluída!',
           description: `${result.insertedCount} novo(s), ${result.updatedCount} atualizado(s), ${result.skippedCount} pulado(s)${
             skippedOtherStore > 0 ? `, ${skippedOtherStore} de outra(s) loja(s) ignorada(s)` : ''
-          } — ${segments} segmento(s) de até 15 dias, ${totalSales} venda(s) bruta(s).`,
+          } — ${segments} segmento(s) de até 15 dias, ${totalSales} venda(s) bruta(s).${unmappedLine}`,
         })
       }
       onSuccess?.()
