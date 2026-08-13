@@ -143,6 +143,8 @@ export function SyncSaiposDialog({ open, onOpenChange, onSuccess }: SyncSaiposDi
       const totalSynced =
         (result.insertedCount || 0) + (result.updatedCount || 0) + (result.skippedCount || 0)
       const diag = result.diagnostic
+      const segments = result.segments || 1
+      const totalSales = result.totalSales ?? 0
 
       // Quando a sincronização retorna 0 registros, exibe o diagnóstico da
       // resposta da Saipos na mensagem para o usuário poder nos reportar a
@@ -155,14 +157,14 @@ export function SyncSaiposDialog({ open, onOpenChange, onSuccess }: SyncSaiposDi
           : ''
         toast({
           title: 'Sincronização retornou 0 registros',
-          description: `Status ${diag.statusCode ?? 'N/A'} | tipo: ${diag.responseType ?? 'N/A'} | chaves: [${keys}] | items: ${diag.itemsLength ?? 0} | chaves do 1º item: [${itemKeys}].${snippet}`,
+          description: `${segments} segmento(s) | ${totalSales} venda(s) bruta(s). Status ${diag.statusCode ?? 'N/A'} | tipo: ${diag.responseType ?? 'N/A'} | chaves: [${keys}] | items: ${diag.itemsLength ?? 0} | chaves do 1º item: [${itemKeys}].${snippet}`,
           variant: 'destructive',
         })
         setSyncDiagnostic(diag)
       } else {
         toast({
           title: 'Sincronização concluída!',
-          description: `${result.insertedCount} novo(s), ${result.updatedCount} atualizado(s), ${result.skippedCount} pulado(s).`,
+          description: `${result.insertedCount} novo(s), ${result.updatedCount} atualizado(s), ${result.skippedCount} pulado(s) — ${segments} segmento(s) de até 15 dias, ${totalSales} venda(s) bruta(s).`,
         })
       }
       onSuccess?.()

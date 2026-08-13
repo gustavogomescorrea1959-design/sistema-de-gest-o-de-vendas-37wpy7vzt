@@ -22,19 +22,20 @@ routerAdd(
     }
     token = token.replace(/^Bearer\s+/i, '').trim()
 
-    // Intervalo de datas padrão para teste: últimos 7 dias (formato YYYY-MM-DD HH:MM:SS)
+    // Intervalo de datas padrão para teste: últimos 7 dias (formato ISO 8601,
+    // exigido pelo /v1/search_sales — ex: 2024-07-23T00:00:00).
     function pad(n) {
       n = String(n)
       return n.length < 2 ? '0' + n : n
     }
-    function formatDateTime(d) {
+    function formatISO(d) {
       return (
         d.getFullYear() +
         '-' +
         pad(d.getMonth() + 1) +
         '-' +
         pad(d.getDate()) +
-        ' ' +
+        'T' +
         pad(d.getHours()) +
         ':' +
         pad(d.getMinutes()) +
@@ -44,11 +45,11 @@ routerAdd(
     }
     var now = new Date()
     var start = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
-    var pFilterDateStart = formatDateTime(start)
-    var pFilterDateEnd = formatDateTime(now)
+    var pFilterDateStart = formatISO(start)
+    var pFilterDateEnd = formatISO(now)
 
     var testUrl =
-      'https://data.saipos.io/v1/sales_status_histories' +
+      'https://data.saipos.io/v1/search_sales' +
       '?p_date_column_filter=shift_date' +
       '&p_filter_date_start=' +
       encodeURIComponent(pFilterDateStart) +
@@ -108,7 +109,6 @@ routerAdd(
         })
       }
 
-      // Detecta erro de pool de conexão do PostgREST (PGRST003)
       var isPoolTimeout = false
       try {
         var rj = res.json
@@ -195,7 +195,7 @@ routerAdd(
     }
     if (res.statusCode >= 200 && res.statusCode < 300) {
       // Extrai items tentando múltiplos níveis de aninhamento comuns em APIs
-      // REST (PostgREST, etc.). Ordem: mais aninhado primeiro.
+      // REST (PostgREST, etc.). O /v1/search_sales retorna um array direto.
       function extractItemsTest(json) {
         if (Array.isArray(json)) return json
         if (!json || typeof json !== 'object') return []
@@ -221,9 +221,6 @@ routerAdd(
       }
       var testItems = extractItemsTest(res.json)
 
-      // Diagnóstico: estrutura da resposta da Saipos. Retornado no JSON (além
-      // do log) para o frontend conseguir exibi-lo mesmo quando os logs não
-      // aparecem no stream de hooks.
       var rjType = Array.isArray(res.json) ? 'array' : res.json === null ? 'null' : typeof res.json
       var topKeys =
         res.json && typeof res.json === 'object' && !Array.isArray(res.json)

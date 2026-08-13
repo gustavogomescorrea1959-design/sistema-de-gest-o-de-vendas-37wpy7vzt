@@ -26,8 +26,39 @@ routerAdd(
       return e.json(400, { error: 'startDate e endDate são obrigatórios.' })
     }
 
-    var pFilterDateStart = startDateRaw + ' 00:00:00'
-    var pFilterDateEnd = endDateRaw + ' 23:59:59'
+    // --- Helpers (tudo inline — o JSVM não enxerga declarações de top-level) ---
+
+    function pad2(n) {
+      n = String(n)
+      return n.length < 2 ? '0' + n : n
+    }
+
+    // Converte "YYYY-MM-DD" (ou Date) em um objeto Date em UTC meia-noite,
+    // para podermos iterar dias sem sofrer com fuso local.
+    function parseStartDate(s) {
+      var m = String(s).match(/(\d{4})-(\d{2})-(\d{2})/)
+      if (m) return new Date(Date.UTC(+m[1], +m[2] - 1, +m[3]))
+      var d = new Date(s)
+      if (!isNaN(d.getTime())) return d
+      return null
+    }
+
+    // Formato ISO 8601 esperado pelo /v1/search_sales (ex: 2024-07-23T00:00:00).
+    function toISO(d) {
+      return (
+        d.getUTCFullYear() +
+        '-' +
+        pad2(d.getUTCMonth() + 1) +
+        '-' +
+        pad2(d.getUTCDate()) +
+        'T' +
+        pad2(d.getUTCHours()) +
+        ':' +
+        pad2(d.getUTCMinutes()) +
+        ':' +
+        pad2(d.getUTCSeconds())
+      )
+    }
 
     var CHANNEL_MAP = {
       ifood: 'iFood',
@@ -61,6 +92,7 @@ routerAdd(
 
     function mapChannel(raw) {
       var c = (raw || '').trim().toLowerCase()
+      if (!c) return ''
       if (CHANNEL_MAP[c]) return CHANNEL_MAP[c]
       for (var k in CHANNEL_MAP) {
         if (c.indexOf(k) >= 0 || k.indexOf(c) >= 0) return CHANNEL_MAP[k]
@@ -88,8 +120,8 @@ routerAdd(
     }
 
     // Extrai o array de items da resposta da Saipos, tentando múltiplos níveis
-    // de aninhamento comuns em APIs REST (PostgREST, etc.). Ordem: mais aninhado
-    // primeiro, depois níveis menores, por último array direto.
+    // de aninhamento comuns em APIs REST (PostgREST, etc.). O /v1/search_sales
+    // retorna um array direto no topo, mas mantemos a flexibilidade.
     function extractItems(json) {
       if (Array.isArray(json)) return json
       if (!json || typeof json !== 'object') return []
@@ -107,7 +139,6 @@ routerAdd(
       for (var i = 0; i < candidates.length; i++) {
         if (Array.isArray(candidates[i])) return candidates[i]
       }
-      // Última tentativa: qualquer array no primeiro nível do objeto
       var keys = Object.keys(json)
       for (var k = 0; k < keys.length; k++) {
         if (Array.isArray(json[keys[k]])) return json[keys[k]]
@@ -115,9 +146,9 @@ routerAdd(
       return []
     }
 
-    // Realiza a requisição à API do Saipos com retry automático (até 3 tentativas)
-    // quando a resposta indicar erro PGRST003 ("Timed out acquiring connection
-    // from connection pool"). Aguarda 2s entre tentativas.
+    // Realiza a requisição à API do Saipos com retry automático (até 3
+    // tentativas) quando a resposta indicar erro PGRST003 ("Timed out
+    // acquiring connection from connection pool"). Aguarda 2s entre tentativas.
     function requestWithRetry(url, timeoutSecs) {
       var MAX_ATTEMPTS = 3
       var res = null
@@ -155,7 +186,6 @@ routerAdd(
           }
         }
 
-        // Detecta erro de pool de conexão do PostgREST (PGRST003)
         var isPoolTimeout = false
         try {
           var rj = res.json
@@ -206,97 +236,182 @@ routerAdd(
       return { res: res }
     }
 
-    var allRecords = []
-    var offset = 0
-    var limit = 300
-    var hasMore = true
-    var maxPages = 500
-    var firstPageDiagnostic = null
+    // Faz UMA chamada paginada ao /v1/search_sales para um intervalo de até
+    // 15 dias (startISO..endISO em ISO 8601). Retorna { items, diagnostic }.
+    function fetchSegment(startISO, endISO) {
+      var allItems = []
+      var offset = 0
+      var limit = 1000
+      var hasMore = true
+      var maxPages = 500
+      var segDiagnostic = null
 
-    for (var page = 0; page < maxPages && hasMore; page++) {
-      var apiUrl =
-        'https://data.saipos.io/v1/sales_status_histories' +
-        '?p_date_column_filter=shift_date' +
-        '&p_filter_date_start=' +
-        encodeURIComponent(pFilterDateStart) +
-        '&p_filter_date_end=' +
-        encodeURIComponent(pFilterDateEnd) +
-        '&p_limit=' +
-        limit +
-        '&p_offset=' +
-        offset
+      for (var page = 0; page < maxPages && hasMore; page++) {
+        var apiUrl =
+          'https://data.saipos.io/v1/search_sales' +
+          '?p_date_column_filter=shift_date' +
+          '&p_filter_date_start=' +
+          encodeURIComponent(startISO) +
+          '&p_filter_date_end=' +
+          encodeURIComponent(endISO) +
+          '&p_limit=' +
+          limit +
+          '&p_offset=' +
+          offset
 
-      var requestResult = requestWithRetry(apiUrl, 60)
-      if (requestResult.errorResponse) return requestResult.errorResponse
-      var res = requestResult.res
+        var requestResult = requestWithRetry(apiUrl, 60)
+        if (requestResult.errorResponse) return { errorResponse: requestResult.errorResponse }
+        var res = requestResult.res
 
-      if (res.statusCode === 401 || res.statusCode === 403) {
-        return e.json(401, { error: 'Token Saipos Inválido' })
-      }
-      if (res.statusCode === 404) {
-        $app.logger().error('Endpoint não encontrado na API do Saipos', 'url', apiUrl)
-        return e.json(404, { error: 'Endpoint não encontrado na API do Saipos: ' + apiUrl })
-      }
-      if (res.statusCode === 429) {
-        var retryAfter = res.headers['Retry-After'] || res.headers['retry-after'] || '60'
-        return e.json(429, {
-          error: 'Limite de requisições atingido. Tente novamente em ' + retryAfter + ' segundos.',
-          retryAfter: parseInt(retryAfter),
-        })
-      }
-      if (res.statusCode !== 200) {
-        return e.json(502, { error: 'Erro na API do Saipos (HTTP ' + res.statusCode + ')' })
-      }
-
-      var items = extractItems(res.json)
-
-      // Captura diagnóstico da primeira página para retornar no JSON de resposta
-      // (além do log) — assim o frontend consegue exibir a estrutura real da
-      // resposta da Saipos mesmo quando os logs não aparecem no stream de hooks.
-      if (page === 0) {
-        var rj0 = res.json
-        var rjType0 = Array.isArray(rj0) ? 'array' : rj0 === null ? 'null' : typeof rj0
-        var topKeys0 = rj0 && typeof rj0 === 'object' && !Array.isArray(rj0) ? Object.keys(rj0) : []
-        var rawSnippet0 = ''
-        if (items.length === 0) {
+        if (res.statusCode === 401 || res.statusCode === 403) {
+          return { errorResponse: e.json(401, { error: 'Token Saipos Inválido' }) }
+        }
+        if (res.statusCode === 404) {
+          $app.logger().error('Endpoint não encontrado na API do Saipos', 'url', apiUrl)
+          return {
+            errorResponse: e.json(404, {
+              error: 'Endpoint não encontrado na API do Saipos: ' + apiUrl,
+            }),
+          }
+        }
+        if (res.statusCode === 429) {
+          var retryAfter = res.headers['Retry-After'] || res.headers['retry-after'] || '60'
+          return {
+            errorResponse: e.json(429, {
+              error:
+                'Limite de requisições atingido. Tente novamente em ' + retryAfter + ' segundos.',
+              retryAfter: parseInt(retryAfter),
+            }),
+          }
+        }
+        if (res.statusCode === 400) {
+          // Período inválido (ex: > 15 dias) ou outro erro de validação da API.
+          var b400 = ''
           try {
-            if (res.body) rawSnippet0 = new TextDecoder().decode(res.body).substring(0, 500)
+            if (res.body) b400 = new TextDecoder().decode(res.body).substring(0, 500)
           } catch (_) {}
+          $app.logger().error('Saipos 400 no segmento ' + startISO + '..' + endISO + ': ' + b400)
+          return {
+            errorResponse: e.json(502, {
+              error:
+                'A API do Saipos rejeitou o período (HTTP 400). Verifique se o intervalo é válido. Detalhe: ' +
+                b400,
+            }),
+          }
         }
-        var firstHistoryKeys0 = []
-        if (
-          items.length > 0 &&
-          Array.isArray(items[0].histories) &&
-          items[0].histories.length > 0
-        ) {
-          firstHistoryKeys0 = Object.keys(items[0].histories[0])
+        if (res.statusCode !== 200) {
+          return {
+            errorResponse: e.json(502, {
+              error: 'Erro na API do Saipos (HTTP ' + res.statusCode + ')',
+            }),
+          }
         }
-        firstPageDiagnostic = {
-          statusCode: res.statusCode,
-          responseType: rjType0,
-          topLevelKeys: topKeys0,
-          itemsLength: items.length,
-          firstItemKeys: items.length > 0 ? Object.keys(items[0]) : [],
-          historyKeys: firstHistoryKeys0,
-          rawBodySnippet: rawSnippet0,
+
+        var items = extractItems(res.json)
+
+        // Diagnóstico da primeira página deste segmento.
+        if (page === 0) {
+          var rj0 = res.json
+          var rjType0 = Array.isArray(rj0) ? 'array' : rj0 === null ? 'null' : typeof rj0
+          var topKeys0 =
+            rj0 && typeof rj0 === 'object' && !Array.isArray(rj0) ? Object.keys(rj0) : []
+          var rawSnippet0 = ''
+          if (items.length === 0) {
+            try {
+              if (res.body) rawSnippet0 = new TextDecoder().decode(res.body).substring(0, 500)
+            } catch (_) {}
+          }
+          segDiagnostic = {
+            statusCode: res.statusCode,
+            responseType: rjType0,
+            topLevelKeys: topKeys0,
+            itemsLength: items.length,
+            firstItemKeys: items.length > 0 ? Object.keys(items[0]) : [],
+            segmentStart: startISO,
+            segmentEnd: endISO,
+            rawBodySnippet: rawSnippet0,
+          }
+          $app.logger().warn('Saipos sync diagnóstico: ' + JSON.stringify(segDiagnostic))
         }
-        $app.logger().warn('Saipos sync diagnóstico: ' + JSON.stringify(firstPageDiagnostic))
+
+        if (items.length === 0) {
+          hasMore = false
+          break
+        }
+
+        allItems = allItems.concat(items)
+
+        if (items.length < limit) {
+          hasMore = false
+        } else {
+          offset += limit
+        }
       }
 
-      if (items.length === 0) {
-        hasMore = false
-        break
-      }
+      return { items: allItems, diagnostic: segDiagnostic }
+    }
+    // (errorResponse devolvido diretamente nos ramos de erro acima)
 
-      allRecords = allRecords.concat(items)
-
-      if (items.length < limit) {
-        hasMore = false
-      } else {
-        offset += limit
-      }
+    // --- Segmentação do período em chunks de no máximo 15 dias ---
+    // O /v1/search_sales rejeita períodos maiores que 15 dias, então quebramos
+    // o intervalo solicitado em segmentos contíguos de 15 dias cada.
+    var startD = parseStartDate(startDateRaw)
+    var endD = parseStartDate(endDateRaw)
+    if (!startD || !endD) {
+      return e.json(400, {
+        error: 'Formato de data inválido. Use YYYY-MM-DD (ex: 2024-07-01).',
+      })
+    }
+    if (endD.getTime() < startD.getTime()) {
+      return e.json(400, { error: 'endDate deve ser maior ou igual a startDate.' })
     }
 
+    var MAX_DAYS = 15
+    var DAY_MS = 24 * 60 * 60 * 1000
+    var segments = []
+    var cursor = new Date(startD.getTime())
+    var finalEnd = new Date(endD.getTime())
+    while (cursor.getTime() <= finalEnd.getTime()) {
+      var segEnd = new Date(cursor.getTime() + (MAX_DAYS - 1) * DAY_MS)
+      if (segEnd.getTime() > finalEnd.getTime()) segEnd = new Date(finalEnd.getTime())
+      segments.push({ start: new Date(cursor.getTime()), end: new Date(segEnd.getTime()) })
+      cursor = new Date(segEnd.getTime() + DAY_MS)
+    }
+
+    $app
+      .logger()
+      .info(
+        'Saipos sync: período ' +
+          startDateRaw +
+          '..' +
+          endDateRaw +
+          ' dividido em ' +
+          segments.length +
+          ' segmento(s) de até ' +
+          MAX_DAYS +
+          ' dias',
+      )
+
+    var allRecords = []
+    var firstPageDiagnostic = null
+
+    for (var si = 0; si < segments.length; si++) {
+      var seg = segments[si]
+      var startISO = toISO(seg.start)
+      var endISO = toISO(
+        new Date(seg.end.getTime() + 23 * 60 * 60 * 1000 + 59 * 60 * 1000 + 59 * 1000),
+      )
+      var segResult = fetchSegment(startISO, endISO)
+      if (segResult.errorResponse) return segResult.errorResponse
+      allRecords = allRecords.concat(segResult.items)
+      if (firstPageDiagnostic === null) firstPageDiagnostic = segResult.diagnostic
+    }
+
+    // --- Mapeamento da resposta para daily_sales ---
+    // O /v1/search_sales retorna um array de vendas no formato plano
+    // (shift_date, total_amount, canceled, partner_sale, id_sale_type, ...).
+    // Cada venda vira UMA entrada (não há mais array `histories`). Mantemos
+    // compatibilidade: se um item trouxer `histories`, processamos cada um.
     var groups = {}
     var skipped = 0
     var totalHistories = 0
@@ -305,10 +420,7 @@ routerAdd(
     for (var i = 0; i < allRecords.length; i++) {
       var rec = allRecords[i]
 
-      // A data do turno vem do item pai (shift_date); os dados de vendas
-      // (revenue, orders, channel, average_ticket) estão aninhados dentro do
-      // array `histories`. Se o item não tiver `histories`, tenta mapear o
-      // próprio item diretamente (compatibilidade com formatos antigos).
+      // Data do turno (shift_date) — recomendado pela Saipos para filtros por dia.
       var rawDate = rec.shift_date || rec.data_venda || rec.date || rec.data || rec.sale_date || ''
       var dateStr = parseDateStr(rawDate)
       if (!dateStr) {
@@ -316,15 +428,12 @@ routerAdd(
         continue
       }
 
-      var recCanceled =
-        rec.cancelado ||
-        rec.canceled ||
-        rec.cancelado_sn ||
-        rec.está_cancelado ||
-        rec.is_canceled ||
-        ''
+      // Cancelamento vem como "Y"/"N" no search_sales.
+      var recCanceled = rec.canceled || rec.cancelado || rec.canceled_sn || rec.is_canceled || ''
       var recIsCanceled =
         recCanceled === true ||
+        recCanceled === 'Y' ||
+        recCanceled === 'y' ||
         recCanceled === 'S' ||
         recCanceled === 'SIM' ||
         recCanceled === 'true' ||
@@ -337,35 +446,26 @@ routerAdd(
         totalHistories += histories.length
         if (firstHistoryKeys === null && histories.length > 0) {
           firstHistoryKeys = Object.keys(histories[0])
-          $app
-            .logger()
-            .warn(
-              'Saipos sync: item ' +
-                (i + 1) +
-                ' tem ' +
-                histories.length +
-                ' histories. Chaves do 1º history: ' +
-                JSON.stringify(firstHistoryKeys),
-            )
         }
       }
 
-      // Lista de entradas a processar: cada history vira uma entrada de venda;
-      // se não houver histories, processa o próprio item (formato antigo).
       var entries = histories && histories.length > 0 ? histories : [rec]
 
       for (var h = 0; h < entries.length; h++) {
         var entry = entries[h]
 
+        // Cancelamento no nível da entrada.
         var canceled =
-          entry.cancelado ||
           entry.canceled ||
-          entry.cancelado_sn ||
+          entry.cancelado ||
+          entry.canceled_sn ||
           entry.está_cancelado ||
           entry.is_canceled ||
           ''
         if (
           canceled === true ||
+          canceled === 'Y' ||
+          canceled === 'y' ||
           canceled === 'S' ||
           canceled === 'SIM' ||
           canceled === 'true' ||
@@ -374,7 +474,12 @@ routerAdd(
         )
           continue
 
+        // Canal: preferimos desc_store_partner (nome do parceiro/canal no
+        // search_sales). Depois id_sale_type (1=Entrega,2=Retirada,3=Salão,
+        // 4=Ficha) como fallback para classificar loja vs. entrega.
         var rawCh =
+          (entry.partner_sale &&
+            (entry.partner_sale.desc_store_partner || entry.partner_sale.partner)) ||
           entry.channel ||
           entry.channel_name ||
           entry.canal_venda ||
@@ -383,10 +488,29 @@ routerAdd(
           entry.sales_channel ||
           ''
         var channel = mapChannel(rawCh)
-        if (!channel) channel = 'Desconhecido'
+        if (!channel) {
+          // Fallback pelo tipo de venda.
+          var st = entry.id_sale_type
+          if (st === 1)
+            channel = '' // entrega — tentaremos mapear abaixo
+          else if (st === 2 || st === 3 || st === 4) channel = 'Loja / Restaurante'
+        }
+        if (!channel) {
+          // Tenta extrair canal do nome do parceiro (desc_store_partner) de
+          // forma mais flexível, ou marca como Desconhecido.
+          var partnerName = ''
+          if (entry.partner_sale && entry.partner_sale.desc_store_partner) {
+            partnerName = entry.partner_sale.desc_store_partner
+          }
+          channel = mapChannel(partnerName) || 'Desconhecido'
+        }
 
+        // Valor: total_amount é o total da venda no search_sales. Pode estar
+        // dentro do sub-objeto `totals` ou direto no item (formato antigo).
         var total = parseNum(
-          entry.revenue ||
+          (entry.totals && (entry.totals.total_amount || entry.totals.total)) ||
+            entry.total_amount ||
+            entry.revenue ||
             entry.total ||
             entry.amount ||
             entry.valor_total ||
@@ -394,6 +518,7 @@ routerAdd(
             entry.receita ||
             0,
         )
+        // Pedidos: cada venda == 1 pedido no search_sales.
         var recOrders = parseNum(
           entry.orders ||
             entry.order_count ||
@@ -416,10 +541,12 @@ routerAdd(
       .logger()
       .warn(
         'Saipos sync: total de ' +
-          totalHistories +
-          ' histories processados em ' +
           allRecords.length +
-          ' items. Chaves do 1º history: ' +
+          ' vendas processadas em ' +
+          segments.length +
+          ' segmento(s). ' +
+          totalHistories +
+          ' histories (compat). Chaves do 1º history: ' +
           JSON.stringify(firstHistoryKeys || []),
       )
 
@@ -456,11 +583,6 @@ routerAdd(
           inserted++
         }
       } catch (saveErr) {
-        // Falha de validação ao salvar (ex.: revenue/average_ticket em branco
-        // porque o mapeamento de campos da Saipos está divergente). Retorna o
-        // diagnóstico da primeira página — incluindo as chaves do 1º item
-        // extraído — para o frontend poder exibi-las ao usuário e o time
-        // ajustar o mapeamento.
         var errMsg = saveErr && saveErr.message ? String(saveErr.message) : 'Erro desconhecido'
         $app
           .logger()
@@ -487,6 +609,8 @@ routerAdd(
       insertedCount: inserted,
       updatedCount: updated,
       skippedCount: skipped,
+      segments: segments.length,
+      totalSales: allRecords.length,
       diagnostic: firstPageDiagnostic || null,
     })
   },

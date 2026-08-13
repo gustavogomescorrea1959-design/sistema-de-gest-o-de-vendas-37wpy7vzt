@@ -9,6 +9,10 @@ export interface SaiposDiagnostic {
   historyKeys?: string[]
   totalHistories?: number
   rawBodySnippet?: string
+  /** Início do primeiro segmento de 15 dias consultado (ISO 8601). */
+  segmentStart?: string
+  /** Fim do primeiro segmento de 15 dias consultado (ISO 8601). */
+  segmentEnd?: string
 }
 
 export interface SyncSaiposResult {
@@ -16,6 +20,10 @@ export interface SyncSaiposResult {
   insertedCount: number
   updatedCount: number
   skippedCount: number
+  /** Quantos segmentos de até 15 dias o período foi dividido. */
+  segments?: number
+  /** Total de vendas brutas retornadas pelo /v1/search_sales. */
+  totalSales?: number
   diagnostic?: SaiposDiagnostic | null
   // Present quando a sincronização extrai itens mas falha ao salvar por erro
   // de validação (ex.: revenue/average_ticket em branco).
