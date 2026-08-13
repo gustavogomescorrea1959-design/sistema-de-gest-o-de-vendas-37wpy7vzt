@@ -33,9 +33,7 @@ import { cn } from '@/lib/utils'
 import { getWorkingDaysInMonth, getWorkingDaysPassed } from '@/lib/working-days'
 import { SyncSaiposButton } from '@/components/SyncSaiposButton'
 
-const DELIVERY_CHANNELS = CHANNELS.filter(
-  (ch) => ch !== 'Loja / Restaurante' && ch !== 'Desconhecido',
-)
+const DELIVERY_CHANNELS = CHANNELS.filter((ch) => ch !== 'Loja / Restaurante')
 
 const CHANNEL_COLORS: Record<string, string> = {
   'Loja / Restaurante': 'hsl(var(--chart-1))',
@@ -45,7 +43,6 @@ const CHANNEL_COLORS: Record<string, string> = {
   '99Food': 'hsl(var(--chart-5))',
   WhatsApp: 'hsl(var(--chart-6))',
   Telefone: 'hsl(var(--chart-7))',
-  Desconhecido: 'hsl(var(--muted-foreground))',
 }
 
 export default function Dashboard() {
@@ -95,13 +92,15 @@ export default function Dashboard() {
       >,
     )
 
+    // Apenas canais reconhecidos (CHANNELS) entram nos totais. Registros
+    // legados de canais removidos (ex.: "Desconhecido", de outras lojas) são
+    // ignorados na exibição e nos cálculos — não são excluídos do banco.
     sales.forEach((s) => {
+      if (!channelStats[s.channel]) return
       totalOrders += s.orders
       totalRevenue += s.revenue
-      if (channelStats[s.channel]) {
-        channelStats[s.channel].orders += s.orders
-        channelStats[s.channel].revenue += s.revenue
-      }
+      channelStats[s.channel].orders += s.orders
+      channelStats[s.channel].revenue += s.revenue
     })
 
     goals.forEach((g) => {

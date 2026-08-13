@@ -35,7 +35,6 @@ const ICONS: Record<Channel, React.ElementType> = {
   '99Food': Bike,
   WhatsApp: MessageCircle,
   Telefone: Phone,
-  Desconhecido: HelpCircle,
 }
 
 type FormData = Record<Channel, { id?: string; orders: string; revenue: string }>
@@ -62,6 +61,10 @@ export default function VendasDiarias() {
 
       const newForm = initialFormData()
       records.forEach((r) => {
+        // Ignora registros de canais que não estão mais em CHANNELS (ex.:
+        // "Desconhecido", legado de outras lojas) — eles permanecem no banco
+        // mas não são exibidos nem editáveis neste formulário.
+        if (!newForm[r.channel]) return
         newForm[r.channel] = {
           id: r.id,
           orders: r.orders.toString(),

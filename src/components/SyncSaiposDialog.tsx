@@ -145,6 +145,7 @@ export function SyncSaiposDialog({ open, onOpenChange, onSuccess }: SyncSaiposDi
       const diag = result.diagnostic
       const segments = result.segments || 1
       const totalSales = result.totalSales ?? 0
+      const skippedOtherStore = result.skippedOtherStoreCount ?? 0
 
       // Quando a sincronização retorna 0 registros, exibe o diagnóstico da
       // resposta da Saipos na mensagem para o usuário poder nos reportar a
@@ -164,7 +165,9 @@ export function SyncSaiposDialog({ open, onOpenChange, onSuccess }: SyncSaiposDi
       } else {
         toast({
           title: 'Sincronização concluída!',
-          description: `${result.insertedCount} novo(s), ${result.updatedCount} atualizado(s), ${result.skippedCount} pulado(s) — ${segments} segmento(s) de até 15 dias, ${totalSales} venda(s) bruta(s).`,
+          description: `${result.insertedCount} novo(s), ${result.updatedCount} atualizado(s), ${result.skippedCount} pulado(s)${
+            skippedOtherStore > 0 ? `, ${skippedOtherStore} de outra(s) loja(s) ignorada(s)` : ''
+          } — ${segments} segmento(s) de até 15 dias, ${totalSales} venda(s) bruta(s).`,
         })
       }
       onSuccess?.()

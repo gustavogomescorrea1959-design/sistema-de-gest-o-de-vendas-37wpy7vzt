@@ -488,11 +488,29 @@ routerAdd(
     // compatibilidade: se um item trouxer `histories`, processamos cada um.
     var groups = {}
     var skipped = 0
+    var skippedOtherStore = 0
     var totalHistories = 0
     var firstHistoryKeys = null
 
+    // Código da loja do Alecrim no Saipos. O token da API retorna vendas de
+    // TODAS as lojas associadas a ele; este sistema é exclusivo do Alecrim,
+    // então qualquer venda de outra loja é ignorada (não processada nem salva).
+    // Registros "Desconhecido" já existentes no banco NÃO são deletados aqui —
+    // apenas deixam de ser criados em novas sincronizações.
+    var ALECRIM_STORE_ID = '29090'
+
     for (var i = 0; i < allRecords.length; i++) {
       var rec = allRecords[i]
+
+      // Filtro por loja: apenas vendas do Alecrim (id_store = 29090) são
+      // processadas. Vendas de outras lojas têm partner_sale.desc_store_partner
+      // com nomes que o mapChannel não reconhece (cairiam como "Desconhecido")
+      // e não pertencem a este estabelecimento.
+      var recStoreId = rec.id_store != null ? String(rec.id_store) : ''
+      if (recStoreId !== ALECRIM_STORE_ID) {
+        skippedOtherStore++
+        continue
+      }
 
       // Data do turno (shift_date) — recomendado pela Saipos para filtros por dia.
       var rawDate = rec.shift_date || rec.data_venda || rec.date || rec.data || rec.sale_date || ''
@@ -602,6 +620,16 @@ routerAdd(
     for (var j = 0; j < keys.length; j++) {
       var g = groups[keys[j]]
 
+      // Segurança adicional: mesmo que uma venda do Alecrim ainda caia como
+      // "Desconhecido" (parceiro não mapeado), NÃO criamos nem atualizamos
+      // registros "Desconhecido" — esse canal foi removido do sistema. Vendas
+      // de outras lojas já foram filtradas por id_store acima, então isto só
+      // protege contra parceiros do próprio Alecrim ainda não mapeados.
+      if (g.channel === 'Desconhecido') {
+        skipped++
+        continue
+      }
+
       // Garantias anti-NaN/Infinity: revenue, average_ticket e orders nunca
       // podem chegar NaN/blank ao PocketBase (senão: "cannot be blank").
       var revenue = g.revenue
@@ -701,6 +729,7 @@ routerAdd(
       insertedCount: inserted,
       updatedCount: updated,
       skippedCount: skipped,
+      skippedOtherStoreCount: skippedOtherStore,
       segments: segments.length,
       totalSales: allRecords.length,
       diagnostic: firstPageDiagnostic || null,

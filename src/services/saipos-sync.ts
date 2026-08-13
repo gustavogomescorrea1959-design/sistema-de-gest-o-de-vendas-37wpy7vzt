@@ -20,6 +20,8 @@ export interface SyncSaiposResult {
   insertedCount: number
   updatedCount: number
   skippedCount: number
+  /** Vendas ignoradas por pertencerem a outra loja (id_store != 29090). */
+  skippedOtherStoreCount?: number
   /** Quantos segmentos de até 15 dias o período foi dividido. */
   segments?: number
   /** Total de vendas brutas retornadas pelo /v1/search_sales. */
