@@ -93,10 +93,48 @@ routerAdd(
     function mapChannel(raw) {
       var c = (raw || '').trim().toLowerCase()
       if (!c) return ''
-      if (CHANNEL_MAP[c]) return CHANNEL_MAP[c]
-      for (var k in CHANNEL_MAP) {
-        if (c.indexOf(k) >= 0 || k.indexOf(c) >= 0) return CHANNEL_MAP[k]
+      var original = raw || ''
+
+      // 1) Match EXATO (case-insensitive) — vale para TODAS as chaves,
+      //    inclusive as curtas ("loja", "mesa", "tel", "wpp", "ifood", ...).
+      if (CHANNEL_MAP[c]) {
+        $app
+          .logger()
+          .info('Saipos channel map: "' + original + '" -> "' + CHANNEL_MAP[c] + '" (match exato)')
+        return CHANNEL_MAP[c]
       }
+
+      // 2) Substring APENAS para chaves com 2+ palavras — elas são específicas
+      //    o suficiente para não causar falsos positivos (ex: "cardápio web",
+      //    "central de pedidos", "loja / restaurante"). Chaves de palavra única
+      //    ("loja", "tel", "mesa", "wpp", ...) só valem em match exato, evitando
+      //    que parceiros como "Loja do Zé Delivery" ou "TelEntrega Rápida" sejam
+      //    classificados incorretamente.
+      //    Observação: removida também a direção inversa (k.indexOf(c) >= 0),
+      //    que causava matches absurdos (ex: input "tel" batia com "telefone").
+      for (var k in CHANNEL_MAP) {
+        var words = k.split(/\s+/)
+        var wordCount = 0
+        for (var wi = 0; wi < words.length; wi++) {
+          if (words[wi].length > 0) wordCount++
+        }
+        if (wordCount >= 2 && c.indexOf(k) >= 0) {
+          $app
+            .logger()
+            .info(
+              'Saipos channel map: "' +
+                original +
+                '" -> "' +
+                CHANNEL_MAP[k] +
+                '" (substring multiword: "' +
+                k +
+                '")',
+            )
+          return CHANNEL_MAP[k]
+        }
+      }
+
+      $app.logger().info('Saipos channel map: "' + original + '" -> "" (sem correspondência)')
       return ''
     }
 
