@@ -235,12 +235,34 @@ routerAdd(
           if (res.body) rawSnippet = new TextDecoder().decode(res.body).substring(0, 500)
         } catch (_) {}
       }
+      var firstHistoryKeysTest = []
+      var totalHistoriesTest = 0
+      for (var ti = 0; ti < testItems.length; ti++) {
+        if (Array.isArray(testItems[ti].histories)) {
+          totalHistoriesTest += testItems[ti].histories.length
+          if (firstHistoryKeysTest.length === 0 && testItems[ti].histories.length > 0) {
+            firstHistoryKeysTest = Object.keys(testItems[ti].histories[0])
+          }
+        }
+      }
+      $app
+        .logger()
+        .warn(
+          'Saipos test: ' +
+            totalHistoriesTest +
+            ' histories encontrados em ' +
+            testItems.length +
+            ' items. Chaves do 1º history: ' +
+            JSON.stringify(firstHistoryKeysTest),
+        )
       var diagnostic = {
         statusCode: res.statusCode,
         responseType: rjType,
         topLevelKeys: topKeys,
         itemsLength: testItems.length,
         firstItemKeys: testItems.length > 0 ? Object.keys(testItems[0]) : [],
+        historyKeys: firstHistoryKeysTest,
+        totalHistories: totalHistoriesTest,
         rawBodySnippet: rawSnippet,
       }
       $app.logger().warn('Saipos test diagnóstico: ' + JSON.stringify(diagnostic))

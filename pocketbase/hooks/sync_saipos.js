@@ -263,12 +263,21 @@ routerAdd(
             if (res.body) rawSnippet0 = new TextDecoder().decode(res.body).substring(0, 500)
           } catch (_) {}
         }
+        var firstHistoryKeys0 = []
+        if (
+          items.length > 0 &&
+          Array.isArray(items[0].histories) &&
+          items[0].histories.length > 0
+        ) {
+          firstHistoryKeys0 = Object.keys(items[0].histories[0])
+        }
         firstPageDiagnostic = {
           statusCode: res.statusCode,
           responseType: rjType0,
           topLevelKeys: topKeys0,
           itemsLength: items.length,
           firstItemKeys: items.length > 0 ? Object.keys(items[0]) : [],
+          historyKeys: firstHistoryKeys0,
           rawBodySnippet: rawSnippet0,
         }
         $app.logger().warn('Saipos sync diagnóstico: ' + JSON.stringify(firstPageDiagnostic))
@@ -290,26 +299,16 @@ routerAdd(
 
     var groups = {}
     var skipped = 0
+    var totalHistories = 0
+    var firstHistoryKeys = null
 
     for (var i = 0; i < allRecords.length; i++) {
       var rec = allRecords[i]
-      var canceled =
-        rec.cancelado ||
-        rec.canceled ||
-        rec.cancelado_sn ||
-        rec.está_cancelado ||
-        rec.is_canceled ||
-        ''
-      if (
-        canceled === true ||
-        canceled === 'S' ||
-        canceled === 'SIM' ||
-        canceled === 'true' ||
-        canceled === 'yes' ||
-        canceled === 1
-      )
-        continue
 
+      // A data do turno vem do item pai (shift_date); os dados de vendas
+      // (revenue, orders, channel, average_ticket) estão aninhados dentro do
+      // array `histories`. Se o item não tiver `histories`, tenta mapear o
+      // próprio item diretamente (compatibilidade com formatos antigos).
       var rawDate = rec.shift_date || rec.data_venda || rec.date || rec.data || rec.sale_date || ''
       var dateStr = parseDateStr(rawDate)
       if (!dateStr) {
@@ -317,34 +316,112 @@ routerAdd(
         continue
       }
 
-      var rawCh =
-        rec.canal_venda ||
-        rec.channel ||
-        rec.canal ||
-        rec.origem ||
-        rec.sales_channel ||
-        rec.channel_name ||
+      var recCanceled =
+        rec.cancelado ||
+        rec.canceled ||
+        rec.cancelado_sn ||
+        rec.está_cancelado ||
+        rec.is_canceled ||
         ''
-      var channel = mapChannel(rawCh)
-      if (!channel) {
-        skipped++
-        continue
+      var recIsCanceled =
+        recCanceled === true ||
+        recCanceled === 'S' ||
+        recCanceled === 'SIM' ||
+        recCanceled === 'true' ||
+        recCanceled === 'yes' ||
+        recCanceled === 1
+      if (recIsCanceled) continue
+
+      var histories = Array.isArray(rec.histories) ? rec.histories : null
+      if (histories) {
+        totalHistories += histories.length
+        if (firstHistoryKeys === null && histories.length > 0) {
+          firstHistoryKeys = Object.keys(histories[0])
+          $app
+            .logger()
+            .warn(
+              'Saipos sync: item ' +
+                (i + 1) +
+                ' tem ' +
+                histories.length +
+                ' histories. Chaves do 1º history: ' +
+                JSON.stringify(firstHistoryKeys),
+            )
+        }
       }
 
-      var total = parseNum(
-        rec.valor_total || rec.total || rec.valor || rec.receita || rec.amount || rec.revenue || 0,
-      )
-      var recOrders = parseNum(
-        rec.quantidade_pedidos || rec.orders || rec.quantidade || rec.order_count || 0,
-      )
-      var key = dateStr + '|' + channel
+      // Lista de entradas a processar: cada history vira uma entrada de venda;
+      // se não houver histories, processa o próprio item (formato antigo).
+      var entries = histories && histories.length > 0 ? histories : [rec]
 
-      if (!groups[key]) {
-        groups[key] = { date: dateStr, channel: channel, orders: 0, revenue: 0 }
+      for (var h = 0; h < entries.length; h++) {
+        var entry = entries[h]
+
+        var canceled =
+          entry.cancelado ||
+          entry.canceled ||
+          entry.cancelado_sn ||
+          entry.está_cancelado ||
+          entry.is_canceled ||
+          ''
+        if (
+          canceled === true ||
+          canceled === 'S' ||
+          canceled === 'SIM' ||
+          canceled === 'true' ||
+          canceled === 'yes' ||
+          canceled === 1
+        )
+          continue
+
+        var rawCh =
+          entry.channel ||
+          entry.channel_name ||
+          entry.canal_venda ||
+          entry.canal ||
+          entry.origem ||
+          entry.sales_channel ||
+          ''
+        var channel = mapChannel(rawCh)
+        if (!channel) channel = 'Desconhecido'
+
+        var total = parseNum(
+          entry.revenue ||
+            entry.total ||
+            entry.amount ||
+            entry.valor_total ||
+            entry.valor ||
+            entry.receita ||
+            0,
+        )
+        var recOrders = parseNum(
+          entry.orders ||
+            entry.order_count ||
+            entry.count ||
+            entry.quantidade_pedidos ||
+            entry.quantidade ||
+            0,
+        )
+        var key = dateStr + '|' + channel
+
+        if (!groups[key]) {
+          groups[key] = { date: dateStr, channel: channel, orders: 0, revenue: 0 }
+        }
+        groups[key].orders += recOrders > 0 ? recOrders : 1
+        groups[key].revenue += total
       }
-      groups[key].orders += recOrders > 0 ? recOrders : 1
-      groups[key].revenue += total
     }
+
+    $app
+      .logger()
+      .warn(
+        'Saipos sync: total de ' +
+          totalHistories +
+          ' histories processados em ' +
+          allRecords.length +
+          ' items. Chaves do 1º history: ' +
+          JSON.stringify(firstHistoryKeys || []),
+      )
 
     var collection = $app.findCollectionByNameOrId('daily_sales')
     var inserted = 0

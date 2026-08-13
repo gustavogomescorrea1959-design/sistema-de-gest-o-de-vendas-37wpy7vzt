@@ -6,6 +6,8 @@ export interface SaiposDiagnostic {
   topLevelKeys?: string[]
   itemsLength?: number
   firstItemKeys?: string[]
+  historyKeys?: string[]
+  totalHistories?: number
   rawBodySnippet?: string
 }
 

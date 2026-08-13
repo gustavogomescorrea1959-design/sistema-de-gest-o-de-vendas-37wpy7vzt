@@ -342,6 +342,16 @@ export function SyncSaiposDialog({ open, onOpenChange, onSuccess }: SyncSaiposDi
                     </pre>
                   </div>
                 )}
+                {(testResult.diagnostic.historyKeys || []).length > 0 && (
+                  <div>
+                    <span className="text-xs font-medium text-muted-foreground">
+                      Chaves do 1º history (vendas)
+                    </span>
+                    <pre className="mt-1 text-xs font-mono bg-muted p-2 rounded overflow-x-auto whitespace-pre-wrap break-all">
+                      {(testResult.diagnostic.historyKeys || []).join(', ')}
+                    </pre>
+                  </div>
+                )}
                 {testResult.diagnostic.rawBodySnippet && (
                   <div>
                     <span className="text-xs font-medium text-muted-foreground">
@@ -404,6 +414,16 @@ export function SyncSaiposDialog({ open, onOpenChange, onSuccess }: SyncSaiposDi
                     </span>
                     <pre className="mt-1 text-xs font-mono bg-muted p-2 rounded overflow-x-auto whitespace-pre-wrap break-all">
                       {(syncDiagnostic.firstItemKeys || []).join(', ')}
+                    </pre>
+                  </div>
+                )}
+                {(syncDiagnostic.historyKeys || []).length > 0 && (
+                  <div>
+                    <span className="text-xs font-medium text-muted-foreground">
+                      Chaves do 1º history (vendas)
+                    </span>
+                    <pre className="mt-1 text-xs font-mono bg-muted p-2 rounded overflow-x-auto whitespace-pre-wrap break-all">
+                      {(syncDiagnostic.historyKeys || []).join(', ')}
                     </pre>
                   </div>
                 )}
