@@ -88,6 +88,10 @@ routerAdd(
       salao: 'Loja / Restaurante',
       salão: 'Loja / Restaurante',
       presencial: 'Loja / Restaurante',
+      // Vendas internas do Alecrim (salão, balcão, retirada) — parceiros da
+      // Saipos que representam a própria loja, não delivery externo.
+      'restaurante alecrim': 'Loja / Restaurante',
+      'alecrim - lanches - saudáveis': 'Loja / Restaurante',
     }
 
     function mapChannel(raw) {
