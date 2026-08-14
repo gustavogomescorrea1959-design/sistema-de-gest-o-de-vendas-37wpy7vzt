@@ -571,6 +571,9 @@ routerAdd(
     var totalHistories = 0
     var firstHistoryKeys = null
     var unmappedPartners = new Set()
+    // Contador de vendas não reconhecidas já logadas em detalhe (limite: 5).
+    var unrecognizedLogged = 0
+    var UNRECOGNIZED_LOG_LIMIT = 5
 
     // Código da loja do Alecrim no Saipos. O token da API retorna vendas de
     // TODAS as lojas associadas a ele; este sistema é exclusivo do Alecrim,
@@ -638,6 +641,25 @@ routerAdd(
         var channel = extractChannel(entry, unmappedPartners)
         if (!channel) {
           skippedUnrecognizedPartner++
+          // Diagnóstico: loga em detalhe os campos relevantes do `rec` (venda
+          // original da Saipos) das PRIMEIRAS 5 vendas não reconhecidas, para
+          // entender por que partner_sale/partner_delivery não foram mapeados.
+          if (unrecognizedLogged < UNRECOGNIZED_LOG_LIMIT) {
+            unrecognizedLogged++
+            console.log(
+              '[Saipos sync] Venda não reconhecida #' +
+                unrecognizedLogged +
+                ' — diagnóstico detalhado:',
+            )
+            console.log('  partner_sale: ' + JSON.stringify(rec.partner_sale))
+            console.log('  partner_delivery: ' + JSON.stringify(rec.partner_delivery))
+            console.log('  delivery: ' + JSON.stringify(rec.delivery))
+            console.log('  desc_sale: ' + JSON.stringify(rec.desc_sale))
+            console.log('  schedule: ' + JSON.stringify(rec.schedule))
+            console.log('  id_sale_type: ' + JSON.stringify(rec.id_sale_type))
+            console.log('  id_sale: ' + JSON.stringify(rec.id_sale))
+            console.log('  shift_date: ' + JSON.stringify(rec.shift_date))
+          }
           continue
         }
 
