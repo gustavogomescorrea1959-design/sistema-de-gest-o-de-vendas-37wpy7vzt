@@ -144,7 +144,7 @@ routerAdd(
     // 2) id_sale_type (2=Retirada, 3=Salão, 4=Ficha => Loja / Restaurante).
     // 3) campos legados (channel, canal, origem, ...).
     // 4) "Desconhecido".
-    function extractChannel(entry) {
+    function extractChannel(entry, unmappedPartners) {
       var ps = entry.partner_sale
       if (ps && typeof ps === 'object') {
         var pn = ps.desc_store_partner || ps.partner || ps.name || ''
@@ -166,6 +166,13 @@ routerAdd(
       if (legacy) {
         var lm = mapChannel(legacy)
         if (lm) return lm
+      }
+      // Fallback: parceiro não mapeado. Guardamos o nome original para
+      // diagnóstico no retorno da sincronização.
+      var originalPartnerName =
+        ps && typeof ps === 'object' ? ps.desc_store_partner || ps.partner || ps.name || '' : ''
+      if (originalPartnerName && unmappedPartners) {
+        unmappedPartners.add(originalPartnerName)
       }
       return 'Desconhecido'
     }
@@ -491,6 +498,7 @@ routerAdd(
     var skippedOtherStore = 0
     var totalHistories = 0
     var firstHistoryKeys = null
+    var unmappedPartners = new Set()
 
     // Código da loja do Alecrim no Saipos. O token da API retorna vendas de
     // TODAS as lojas associadas a ele; este sistema é exclusivo do Alecrim,
@@ -569,7 +577,7 @@ routerAdd(
         // Canal: partner_sale é um OBJETO com desc_store_partner (nome do
         // canal: "iFood", "WhatsApp", "Cardápio Web", ...). Depois id_sale_type
         // e por fim "Desconhecido".
-        var channel = extractChannel(entry)
+        var channel = extractChannel(entry, unmappedPartners)
 
         // Receita: total_amount (número) é o total da venda. Se for
         // null/undefined/0, caímos para total_amount_items como fallback.
@@ -733,7 +741,7 @@ routerAdd(
       segments: segments.length,
       totalSales: allRecords.length,
       diagnostic: firstPageDiagnostic || null,
-      unmappedPartners: Object.keys(unmappedPartners),
+      unmappedPartners: Array.from(unmappedPartners),
     })
   },
   $apis.requireAuth(),
