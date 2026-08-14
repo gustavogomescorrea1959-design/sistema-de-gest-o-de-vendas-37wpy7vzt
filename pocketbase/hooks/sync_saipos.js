@@ -148,17 +148,22 @@ routerAdd(
     }
 
     // Extrai o canal de venda de um item do /v1/search_sales.
-    // partner_sale é um OBJETO (não string) cujo desc_store_partner traz o nome
-    // do canal/parceiro ("iFood", "WhatsApp", "Cardápio Web", ...). Para pedidos
-    // de delivery (iFood, 99Food, etc.), o nome do parceiro pode estar em
-    // partner_delivery.desc_store_partner em vez de partner_sale. Há também
+    // partner_sale é um OBJETO (não string) cujo desc_partner_sale traz o nome
+    // do canal/marketplace ("iFood", "99 Food", "Central de Pedidos", ...). Para
+    // pedidos de delivery (iFood, 99Food, etc.), o nome do parceiro pode estar
+    // em partner_delivery.desc_partner_sale em vez de partner_sale. Há também
     // campos legados (channel, canal, origem, ...).
     //
+    // IMPORTANTE: o campo desc_store_partner contém o nome da LOJA (ex:
+    // "Restaurante Alecrim"), NÃO o canal. A partir de 09/08 a Saipos mudou a
+    // estrutura e desc_store_partner passou a vir vazio ou com nome da loja, por
+    // isso usamos desc_partner_sale como fonte primária do canal.
+    //
     // REGRA:
-    // 1) partner_sale existe (desc_store_partner não vazio) e mapChannel
+    // 1) partner_sale existe (desc_partner_sale não vazio) e mapChannel
     //    reconhece -> retorna o canal mapeado.
     // 2) partner_sale NÃO traz nome reconhecível (ausente, vazio ou não
-    //    mapeado) -> tenta partner_delivery.desc_store_partner. Se mapChannel
+    //    mapeado) -> tenta partner_delivery.desc_partner_sale. Se mapChannel
     //    reconhecer, retorna o canal mapeado. Parceiros não reconhecidos de
     //    AMBAS as fontes (partner_sale e partner_delivery) são registrados em
     //    unmappedPartners para diagnóstico.
@@ -176,13 +181,13 @@ routerAdd(
     var STORE_SALE_TYPES = { 2: true, 3: true, 4: true }
 
     function extractChannel(entry, unmappedPartners) {
-      // 1) partner_sale presente (objeto com desc_store_partner não vazio).
+      // 1) partner_sale presente (objeto com desc_partner_sale não vazio).
       //    Se mapChannel reconhecer, retorna o canal. Se houver nome mas não for
       //    reconhecido, registra em unmappedPartners e tenta partner_delivery
       //    antes de pular definitivamente.
       var ps = entry.partner_sale
       if (ps && typeof ps === 'object') {
-        var pn = ps.desc_store_partner || ps.partner || ps.name || ''
+        var pn = ps.desc_partner_sale || ps.partner || ps.name || ''
         if (pn) {
           var mapped = mapChannel(pn)
           if (mapped) return mapped
@@ -192,11 +197,11 @@ routerAdd(
 
       // 2) partner_delivery como fonte alternativa. Para pedidos de delivery
       //    (iFood, 99Food, etc.), o nome do parceiro pode estar em
-      //    partner_delivery.desc_store_partner e não em partner_sale. Quando
+      //    partner_delivery.desc_partner_sale e não em partner_sale. Quando
       //    partner_sale vem vazio ou sem nome reconhecível, tentamos aqui.
       var pd = entry.partner_delivery
       if (pd && typeof pd === 'object') {
-        var pdn = pd.desc_store_partner || pd.partner || pd.name || ''
+        var pdn = pd.desc_partner_sale || pd.partner || pd.name || ''
         if (pdn) {
           var pdMapped = mapChannel(pdn)
           if (pdMapped) return pdMapped
@@ -565,16 +570,12 @@ routerAdd(
     var groups = {}
     var skipped = 0
     var skippedOtherStore = 0
-    // Vendas puladas porque o parceiro (desc_store_partner) não foi reconhecido
+    // Vendas puladas porque o parceiro (desc_partner_sale) não foi reconhecido
     // pelo mapChannel (ex: "Ficha", "Salão", "Alecrim - Lanches - Saudáveis").
     var skippedUnrecognizedPartner = 0
     var totalHistories = 0
     var firstHistoryKeys = null
     var unmappedPartners = new Set()
-    // Contador de vendas não reconhecidas já logadas em detalhe (limite: 5).
-    var unrecognizedLogged = 0
-    var UNRECOGNIZED_LOG_LIMIT = 5
-
     // Código da loja do Alecrim no Saipos. O token da API retorna vendas de
     // TODAS as lojas associadas a ele; este sistema é exclusivo do Alecrim,
     // então qualquer venda de outra loja é ignorada (não processada nem salva).
@@ -586,7 +587,7 @@ routerAdd(
       var rec = allRecords[i]
 
       // Filtro por loja: apenas vendas do Alecrim (id_store = 29090) são
-      // processadas. Vendas de outras lojas têm partner_sale.desc_store_partner
+      // processadas. Vendas de outras lojas têm partner_sale.desc_partner_sale
       // com nomes que o mapChannel não reconhece (cairiam como "Desconhecido")
       // e não pertencem a este estabelecimento.
       var recStoreId = rec.id_store != null ? String(rec.id_store) : ''
@@ -632,8 +633,8 @@ routerAdd(
           ''
         if (isCanceledFlag(canceled)) continue
 
-        // Canal: extractChannel tenta partner_sale.desc_store_partner primeiro;
-        // se não houver nome reconhecível, tenta partner_delivery.desc_store_partner
+        // Canal: extractChannel tenta partner_sale.desc_partner_sale primeiro;
+        // se não houver nome reconhecível, tenta partner_delivery.desc_partner_sale
         // (fonte onde vêm os parceiros de delivery como iFood, 99Food, ...). Se
         // ambas falharem, usa o fallback por id_sale_type 2/3/4 (Ficha/Salão/Balcão)
         // -> "Loja / Restaurante". Parceiros não reconhecidos de AMBAS as fontes
@@ -641,25 +642,6 @@ routerAdd(
         var channel = extractChannel(entry, unmappedPartners)
         if (!channel) {
           skippedUnrecognizedPartner++
-          // Diagnóstico: loga em detalhe os campos relevantes do `rec` (venda
-          // original da Saipos) das PRIMEIRAS 5 vendas não reconhecidas, para
-          // entender por que partner_sale/partner_delivery não foram mapeados.
-          if (unrecognizedLogged < UNRECOGNIZED_LOG_LIMIT) {
-            unrecognizedLogged++
-            console.log(
-              '[Saipos sync] Venda não reconhecida #' +
-                unrecognizedLogged +
-                ' — diagnóstico detalhado:',
-            )
-            console.log('  partner_sale: ' + JSON.stringify(rec.partner_sale))
-            console.log('  partner_delivery: ' + JSON.stringify(rec.partner_delivery))
-            console.log('  delivery: ' + JSON.stringify(rec.delivery))
-            console.log('  desc_sale: ' + JSON.stringify(rec.desc_sale))
-            console.log('  schedule: ' + JSON.stringify(rec.schedule))
-            console.log('  id_sale_type: ' + JSON.stringify(rec.id_sale_type))
-            console.log('  id_sale: ' + JSON.stringify(rec.id_sale))
-            console.log('  shift_date: ' + JSON.stringify(rec.shift_date))
-          }
           continue
         }
 
