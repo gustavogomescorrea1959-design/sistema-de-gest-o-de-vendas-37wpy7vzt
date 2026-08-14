@@ -595,6 +595,11 @@ routerAdd(
     var totalHistories = 0
     var firstHistoryKeys = null
     var unmappedPartners = new Set()
+    // Diagnóstico: acumula TODOS os valores únicos de desc_partner_sale
+    // (de partner_sale e partner_delivery) para o resumo final de parceiros.
+    // Não interfere na lógica de extractChannel/mapChannel/CHANNEL_MAP — é
+    // apenas coleta para um console.log de diagnóstico ao final da sincronização.
+    var partnerSummary = new Set()
     // Código da loja do Alecrim no Saipos. O token da API retorna vendas de
     // TODAS as lojas associadas a ele; este sistema é exclusivo do Alecrim,
     // então qualquer venda de outra loja é ignorada (não processada nem salva).
@@ -652,6 +657,20 @@ routerAdd(
           ''
         if (isCanceledFlag(canceled)) continue
 
+        // Diagnóstico: coleta os valores únicos de desc_partner_sale vindos de
+        // partner_sale e partner_delivery. Não altera a lógica — alimenta apenas
+        // o resumo de parceiros exibido ao final da sincronização.
+        var _psEntry = entry.partner_sale
+        if (_psEntry && typeof _psEntry === 'object') {
+          var _psName = _psEntry.desc_partner_sale || _psEntry.partner || _psEntry.name || ''
+          if (_psName) partnerSummary.add(_psName)
+        }
+        var _pdEntry = entry.partner_delivery
+        if (_pdEntry && typeof _pdEntry === 'object') {
+          var _pdName = _pdEntry.desc_partner_sale || _pdEntry.partner || _pdEntry.name || ''
+          if (_pdName) partnerSummary.add(_pdName)
+        }
+
         // Canal: extractChannel tenta partner_sale.desc_partner_sale primeiro;
         // se não houver nome reconhecível, tenta partner_delivery.desc_partner_sale
         // (fonte onde vêm os parceiros de delivery como iFood, 99Food, ...). Se
@@ -704,6 +723,28 @@ routerAdd(
           ' histories (compat). Chaves do 1º history: ' +
           JSON.stringify(firstHistoryKeys || []),
       )
+
+    // --- Resumo de parceiros (diagnóstico) ---
+    // Lista todos os valores únicos de desc_partner_sale encontrados em
+    // partner_sale e partner_delivery durante a sincronização, com o canal
+    // mapeado por mapChannel (ou "NÃO MAPEADO"). Não altera a lógica de
+    // extractChannel/mapChannel/CHANNEL_MAP — é apenas um log de diagnóstico.
+    console.log('[Saipos sync] Resumo de parceiros:')
+    var _partnerNames = Array.from(partnerSummary)
+    if (_partnerNames.length === 0) {
+      console.log('[Saipos sync]   (nenhum parceiro encontrado)')
+    } else {
+      for (var _pi = 0; _pi < _partnerNames.length; _pi++) {
+        var _partnerName = _partnerNames[_pi]
+        var _mappedChannel = mapChannel(_partnerName)
+        console.log(
+          '[Saipos sync]   "' + _partnerName + '" -> ' + (_mappedChannel || 'NÃO MAPEADO'),
+        )
+      }
+    }
+    $app
+      .logger()
+      .info('[Saipos sync] Resumo de parceiros: ' + _partnerNames.length + ' valor(es) único(s)')
 
     var collection = $app.findCollectionByNameOrId('daily_sales')
     var inserted = 0
