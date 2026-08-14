@@ -152,11 +152,22 @@ routerAdd(
     //    e traz o nome do canal ("iFood", "WhatsApp", "Cardápio Web", ...).
     // 2) campos legados (channel, canal, origem, ...).
     //
-    // REGRA: se o mapChannel NÃO reconhecer o parceiro, retorna '' (vazio) para
-    // que a venda seja PULADA. NÃO usa id_sale_type como fallback (isso inflava
-    // o canal "Loja / Restaurante" com vendas de "Ficha", "Salão" e outras
-    // lojas) e NÃO cria registro "Desconhecido". O parceiro não reconhecido é
-    // registrado em unmappedPartners para diagnóstico.
+    // REGRA (v0.0.45):
+    // 1) mapChannel reconhece o parceiro (partner_sale.desc_store_partner ou
+    //    campos legados) -> retorna o canal mapeado.
+    // 2) Parceiro NÃO reconhecido + id_sale_type 2, 3 ou 4 (Ficha/Salão/Balcão)
+    //    -> retorna "Loja / Restaurante". Esses três tipos chegam da Saipos SEM
+    //    partner_sale com nome reconhecível — só têm id_sale_type. Sem este
+    //    fallback (removido na v0.0.44) o sync produzia ZERO registros de loja.
+    // 3) Parceiro NÃO reconhecido + outros id_sale_type -> retorna '' (vazio)
+    //    para que a venda seja PULADA. Parceiros externos não reconhecidos
+    //    (ex: "Alecrim - Lanches - Saudáveis", que é outra loja/outro CNPJ) NÃO
+    //    devem ser classificados como "Loja / Restaurante".
+    // O parceiro não reconhecido (quando há partner_sale) é registrado em
+    // unmappedPartners para diagnóstico, MESMO que depois caia no fallback de
+    // id_sale_type 2/3/4.
+    var STORE_SALE_TYPES = { 2: true, 3: true, 4: true }
+
     function extractChannel(entry, unmappedPartners) {
       var ps = entry.partner_sale
       if (ps && typeof ps === 'object') {
@@ -164,7 +175,8 @@ routerAdd(
         if (pn) {
           var mapped = mapChannel(pn)
           if (mapped) return mapped
-          // Parceiro não reconhecido pelo mapChannel — registra para diagnóstico.
+          // Parceiro não reconhecido pelo mapChannel — registra para diagnóstico
+          // (mesmo que a venda caia no fallback de id_sale_type 2/3/4 abaixo).
           if (unmappedPartners) unmappedPartners.add(pn)
         }
       }
@@ -181,7 +193,15 @@ routerAdd(
         var lm = mapChannel(legacy)
         if (lm) return lm
       }
-      // Parceiro não reconhecido: retorna vazio para que a venda seja pulada.
+      // Fallback por id_sale_type: APENAS 2 (Ficha), 3 (Salão) e 4 (Balcão)
+      // viram "Loja / Restaurante". Esses tipos de consumo presencial chegam
+      // sem partner_sale reconhecível. Demais id_sale_type -> venda pulada.
+      var saleType = entry.id_sale_type
+      if (saleType != null && STORE_SALE_TYPES[saleType]) {
+        return 'Loja / Restaurante'
+      }
+      // Parceiro não reconhecido e id_sale_type fora de 2/3/4: retorna vazio
+      // para que a venda seja pulada.
       return ''
     }
 
@@ -587,8 +607,9 @@ routerAdd(
 
         // Canal: partner_sale é um OBJETO com desc_store_partner (nome do
         // canal: "iFood", "WhatsApp", "Cardápio Web", ...). Se o mapChannel NÃO
-        // reconhecer o parceiro, a venda é PULADA (sem fallback por id_sale_type
-        // e sem criar "Desconhecido").
+        // reconhecer o parceiro, há fallback APENAS para id_sale_type 2/3/4
+        // (Ficha/Salão/Balcão -> "Loja / Restaurante"); demais vendas são
+        // puladas. Não há mais criação de "Desconhecido".
         var channel = extractChannel(entry, unmappedPartners)
         if (!channel) {
           skippedUnrecognizedPartner++
