@@ -99,6 +99,12 @@ routerAdd(
       if (!c) return ''
       var original = raw || ''
 
+      // Normalização de caracteres Unicode de traço/hífen para hífen ASCII comum.
+      // Garante que nomes como "Alecrim – Lanches – Saudáveis" (com en-dash U+2013
+      // ou em-dash U+2014) deem match exato com a chave do CHANNEL_MAP
+      // "alecrim - lanches - saudáveis" (que usa hífen ASCII U+002D).
+      c = c.replace(/[\u2010-\u2015\u2212\uFE58\uFE63\uFF0D]/g, '-')
+
       // 1) Match EXATO (case-insensitive) — vale para TODAS as chaves,
       //    inclusive as curtas ("loja", "mesa", "tel", "wpp", "ifood", ...).
       if (CHANNEL_MAP[c]) {
@@ -155,6 +161,16 @@ routerAdd(
         if (pn) {
           var mapped = mapChannel(pn)
           if (mapped) return mapped
+        }
+      }
+      // Antes do fallback por id_sale_type, registrar parceiros não mapeados no
+      // diagnóstico. Antes este bloco pulava direto para o return de
+      // "Loja / Restaurante" sem registrar no unmappedPartners, inflando o canal
+      // silenciosamente quando o parceiro não era reconhecido pelo mapChannel.
+      if (ps && typeof ps === 'object') {
+        var unmappedPn = ps.desc_store_partner || ps.partner || ps.name || ''
+        if (unmappedPn && unmappedPartners) {
+          unmappedPartners.add(unmappedPn)
         }
       }
       var st = entry.id_sale_type
