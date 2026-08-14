@@ -256,6 +256,32 @@ routerAdd(
       if (saleType != null && STORE_SALE_TYPES[saleType]) {
         return 'Loja / Restaurante'
       }
+
+      // Fallback "Telefone" (correção: canal Telefone não integrava após 08/08).
+      // A Saipos NÃO envia a palavra "telefone" em campo algum para vendas por
+      // telefone — elas chegam com partner_sale=null, partner_delivery=null e
+      // desc_store_partner vazio, mas id_sale_type=1 (Delivery) e delivery com
+      // endereço. Como nenhum mapChannel as reconhece (não há nome a mapear), a
+      // venda era pulada. Agora, quando NÃO há parceiro nenhum em nenhum campo
+      // (psName e spName ambos vazios — cobre partner_sale, partner_delivery,
+      // desc_partner_sale top-level, desc_store_partner top-level e aninhado) e
+      // é um Delivery (id_sale_type=1), classificamos como "Telefone". Aplicado
+      // APENAS quando não há parceiro nenhum reconhecível em nenhum campo —
+      // parceiros não-mapeados (ex: "Ficha", "Salão") continuam sendo pulados e
+      // registrados em unmappedPartners. Não afeta id_sale_type 2/3/4
+      // (Loja/Restaurante), canais existentes, filtro de loja nem cancelados.
+      if (!psName && !spName && saleType === 1) {
+        $app
+          .logger()
+          .info(
+            'Saipos fallback Telefone: venda sem parceiro em nenhum campo ' +
+              '(partner_sale/partner_delivery/desc_store_partner vazios) com ' +
+              'id_sale_type=1 (Delivery) -> "Telefone" | id_sale=' +
+              (entry.id_sale || ''),
+          )
+        return 'Telefone'
+      }
+
       return ''
     }
 
@@ -593,6 +619,10 @@ routerAdd(
     // Vendas puladas porque o parceiro (desc_partner_sale) não foi reconhecido
     // pelo mapChannel (ex: "Ficha", "Salão", "Alecrim - Lanches - Saudáveis").
     var skippedUnrecognizedPartner = 0
+    // Contador de logs detalhados de vendas puladas com id_sale_type=1 (Delivery)
+    // que não foram classificadas por nenhum canal nem pelo fallback Telefone.
+    // Limitado a 10 para evitar flood de logs.
+    var skippedTypeId1Logged = 0
     var totalHistories = 0
     var firstHistoryKeys = null
     var unmappedPartners = new Set()
@@ -688,6 +718,64 @@ routerAdd(
         var channel = extractChannel(entry, unmappedPartners)
         if (!channel) {
           skippedUnrecognizedPartner++
+          // Log detalhado para vendas puladas com id_sale_type=1 (Delivery) —
+          // aquelas que têm um parceiro NÃO reconhecido em algum campo (senão o
+          // fallback "Telefone" acima já as teria classificado). Limitado às
+          // primeiras 10 para evitar flood de logs. Campos: id_sale, shift_date,
+          // schedule, desc_sale, id_sale_type, partner_sale, partner_delivery,
+          // desc_store_partner (topo e de partner_sale) e delivery.
+          if (entry.id_sale_type === 1 && skippedTypeId1Logged < 10) {
+            skippedTypeId1Logged++
+            var _logPs = entry.partner_sale
+            var _logPd = entry.partner_delivery
+            var _logDelivery = entry.delivery
+            var _psJson = ''
+            var _pdJson = ''
+            var _deliveryJson = ''
+            try {
+              _psJson = JSON.stringify(_logPs)
+            } catch (_) {
+              _psJson = String(_logPs)
+            }
+            try {
+              _pdJson = JSON.stringify(_logPd)
+            } catch (_) {
+              _pdJson = String(_logPd)
+            }
+            try {
+              _deliveryJson = JSON.stringify(_logDelivery)
+            } catch (_) {
+              _deliveryJson = String(_logDelivery)
+            }
+            var _dspFromPs =
+              _logPs && typeof _logPs === 'object' ? _logPs.desc_store_partner || '' : ''
+            $app
+              .logger()
+              .info(
+                '[Saipos sync] Venda pulada id_sale_type=1 #' +
+                  skippedTypeId1Logged +
+                  ' | id_sale=' +
+                  (entry.id_sale || '') +
+                  ' | shift_date=' +
+                  (entry.shift_date || '') +
+                  ' | schedule=' +
+                  (entry.schedule || '') +
+                  ' | desc_sale=' +
+                  (entry.desc_sale || '') +
+                  ' | id_sale_type=' +
+                  (entry.id_sale_type != null ? String(entry.id_sale_type) : '') +
+                  ' | desc_store_partner(entry)=' +
+                  (entry.desc_store_partner || '') +
+                  ' | desc_store_partner(partner_sale)=' +
+                  _dspFromPs +
+                  ' | partner_sale=' +
+                  _psJson +
+                  ' | partner_delivery=' +
+                  _pdJson +
+                  ' | delivery=' +
+                  _deliveryJson,
+              )
+          }
           continue
         }
 
