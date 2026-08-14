@@ -22,6 +22,9 @@ export interface SyncSaiposResult {
   skippedCount: number
   /** Vendas ignoradas por pertencerem a outra loja (id_store != 29090). */
   skippedOtherStoreCount?: number
+  /** Vendas puladas porque o parceiro (desc_store_partner) não foi reconhecido
+   * pelo mapChannel (ex: "Ficha", "Salão", "Alecrim - Lanches - Saudáveis"). */
+  skippedUnrecognizedPartnerCount?: number
   /** Quantos segmentos de até 15 dias o período foi dividido. */
   segments?: number
   /** Total de vendas brutas retornadas pelo /v1/search_sales. */

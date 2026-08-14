@@ -85,13 +85,12 @@ routerAdd(
       balcao: 'Loja / Restaurante',
       balcão: 'Loja / Restaurante',
       mesa: 'Loja / Restaurante',
-      salao: 'Loja / Restaurante',
-      salão: 'Loja / Restaurante',
       presencial: 'Loja / Restaurante',
-      // Vendas internas do Alecrim (salão, balcão, retirada) — parceiros da
-      // Saipos que representam a própria loja, não delivery externo.
-      'restaurante alecrim': 'Loja / Restaurante',
-      'alecrim - lanches - saudáveis': 'Loja / Restaurante',
+      // OBS: "Salão" e "Ficha" NÃO são canais de venda — são tipos de consumo
+      // interno (balcão/salão) e devem ser PULADOS. "Alecrim - Lanches -
+      // Saudáveis" é outra loja (outro CNPJ) e também deve ser pulada. Por isso
+      // essas chaves foram removidas do CHANNEL_MAP: ao não serem reconhecidas
+      // pelo mapChannel, a venda é ignorada (regra de parceiro não reconhecido).
     }
 
     function mapChannel(raw) {
@@ -149,11 +148,15 @@ routerAdd(
     }
 
     // Extrai o canal de venda de um item do /v1/search_sales.
-    // 1) partner_sale.desc_store_partner  — partner_sale é um OBJETO (não string)
+    // 1) partner_sale.desc_store_partner — partner_sale é um OBJETO (não string)
     //    e traz o nome do canal ("iFood", "WhatsApp", "Cardápio Web", ...).
-    // 2) id_sale_type (2=Retirada, 3=Salão, 4=Ficha => Loja / Restaurante).
-    // 3) campos legados (channel, canal, origem, ...).
-    // 4) "Desconhecido".
+    // 2) campos legados (channel, canal, origem, ...).
+    //
+    // REGRA: se o mapChannel NÃO reconhecer o parceiro, retorna '' (vazio) para
+    // que a venda seja PULADA. NÃO usa id_sale_type como fallback (isso inflava
+    // o canal "Loja / Restaurante" com vendas de "Ficha", "Salão" e outras
+    // lojas) e NÃO cria registro "Desconhecido". O parceiro não reconhecido é
+    // registrado em unmappedPartners para diagnóstico.
     function extractChannel(entry, unmappedPartners) {
       var ps = entry.partner_sale
       if (ps && typeof ps === 'object') {
@@ -161,20 +164,11 @@ routerAdd(
         if (pn) {
           var mapped = mapChannel(pn)
           if (mapped) return mapped
+          // Parceiro não reconhecido pelo mapChannel — registra para diagnóstico.
+          if (unmappedPartners) unmappedPartners.add(pn)
         }
       }
-      // Antes do fallback por id_sale_type, registrar parceiros não mapeados no
-      // diagnóstico. Antes este bloco pulava direto para o return de
-      // "Loja / Restaurante" sem registrar no unmappedPartners, inflando o canal
-      // silenciosamente quando o parceiro não era reconhecido pelo mapChannel.
-      if (ps && typeof ps === 'object') {
-        var unmappedPn = ps.desc_store_partner || ps.partner || ps.name || ''
-        if (unmappedPn && unmappedPartners) {
-          unmappedPartners.add(unmappedPn)
-        }
-      }
-      var st = entry.id_sale_type
-      if (st === 2 || st === 3 || st === 4) return 'Loja / Restaurante'
+      // Campos legados (channel, canal, origem, ...).
       var legacy =
         entry.channel ||
         entry.channel_name ||
@@ -187,14 +181,8 @@ routerAdd(
         var lm = mapChannel(legacy)
         if (lm) return lm
       }
-      // Fallback: parceiro não mapeado. Guardamos o nome original para
-      // diagnóstico no retorno da sincronização.
-      var originalPartnerName =
-        ps && typeof ps === 'object' ? ps.desc_store_partner || ps.partner || ps.name || '' : ''
-      if (originalPartnerName && unmappedPartners) {
-        unmappedPartners.add(originalPartnerName)
-      }
-      return 'Desconhecido'
+      // Parceiro não reconhecido: retorna vazio para que a venda seja pulada.
+      return ''
     }
 
     function parseDateStr(raw) {
@@ -516,6 +504,9 @@ routerAdd(
     var groups = {}
     var skipped = 0
     var skippedOtherStore = 0
+    // Vendas puladas porque o parceiro (desc_store_partner) não foi reconhecido
+    // pelo mapChannel (ex: "Ficha", "Salão", "Alecrim - Lanches - Saudáveis").
+    var skippedUnrecognizedPartner = 0
     var totalHistories = 0
     var firstHistoryKeys = null
     var unmappedPartners = new Set()
@@ -595,9 +586,14 @@ routerAdd(
           continue
 
         // Canal: partner_sale é um OBJETO com desc_store_partner (nome do
-        // canal: "iFood", "WhatsApp", "Cardápio Web", ...). Depois id_sale_type
-        // e por fim "Desconhecido".
+        // canal: "iFood", "WhatsApp", "Cardápio Web", ...). Se o mapChannel NÃO
+        // reconhecer o parceiro, a venda é PULADA (sem fallback por id_sale_type
+        // e sem criar "Desconhecido").
         var channel = extractChannel(entry, unmappedPartners)
+        if (!channel) {
+          skippedUnrecognizedPartner++
+          continue
+        }
 
         // Receita: total_amount (número) é o total da venda. Se for
         // null/undefined/0, caímos para total_amount_items como fallback.
@@ -647,16 +643,6 @@ routerAdd(
 
     for (var j = 0; j < keys.length; j++) {
       var g = groups[keys[j]]
-
-      // Segurança adicional: mesmo que uma venda do Alecrim ainda caia como
-      // "Desconhecido" (parceiro não mapeado), NÃO criamos nem atualizamos
-      // registros "Desconhecido" — esse canal foi removido do sistema. Vendas
-      // de outras lojas já foram filtradas por id_store acima, então isto só
-      // protege contra parceiros do próprio Alecrim ainda não mapeados.
-      if (g.channel === 'Desconhecido') {
-        skipped++
-        continue
-      }
 
       // Garantias anti-NaN/Infinity: revenue, average_ticket e orders nunca
       // podem chegar NaN/blank ao PocketBase (senão: "cannot be blank").
@@ -756,6 +742,7 @@ routerAdd(
       success: true,
       insertedCount: inserted,
       updatedCount: updated,
+      skippedUnrecognizedPartnerCount: skippedUnrecognizedPartner,
       skippedCount: skipped,
       skippedOtherStoreCount: skippedOtherStore,
       segments: segments.length,

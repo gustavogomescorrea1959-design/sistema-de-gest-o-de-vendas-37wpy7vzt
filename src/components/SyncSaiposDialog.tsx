@@ -146,6 +146,7 @@ export function SyncSaiposDialog({ open, onOpenChange, onSuccess }: SyncSaiposDi
       const segments = result.segments || 1
       const totalSales = result.totalSales ?? 0
       const skippedOtherStore = result.skippedOtherStoreCount ?? 0
+      const skippedUnrecognizedPartner = result.skippedUnrecognizedPartnerCount ?? 0
 
       // Quando a sincronização retorna 0 registros, exibe o diagnóstico da
       // resposta da Saipos na mensagem para o usuário poder nos reportar a
@@ -166,11 +167,13 @@ export function SyncSaiposDialog({ open, onOpenChange, onSuccess }: SyncSaiposDi
         const unmapped = result.unmappedPartners || []
         const unmappedLine =
           unmapped.length > 0 ? `\n⚠️ Parceiros não mapeados: ${unmapped.join(', ')}` : ''
+        const skippedPartnerLine =
+          skippedUnrecognizedPartner > 0 ? `, ${skippedUnrecognizedPartner} não reconhecida(s)` : ''
         toast({
           title: 'Sincronização concluída!',
           description: `${result.insertedCount} novo(s), ${result.updatedCount} atualizado(s), ${result.skippedCount} pulado(s)${
             skippedOtherStore > 0 ? `, ${skippedOtherStore} de outra(s) loja(s) ignorada(s)` : ''
-          } — ${segments} segmento(s) de até 15 dias, ${totalSales} venda(s) bruta(s).${unmappedLine}`,
+          }${skippedPartnerLine} — ${segments} segmento(s) de até 15 dias, ${totalSales} venda(s) bruta(s).${unmappedLine}`,
         })
       }
       onSuccess?.()
