@@ -228,6 +228,18 @@ routerAdd(
       return isFinite(n) ? n : 0
     }
 
+    // Normaliza a flag de cancelamento da Saipos. O campo `canceled` chega em
+    // formatos variados conforme o endpoint/versão: string "1" (cancelado) ou
+    // "0" (ativo), número 1, string "Y"/"S"/"SIM"/"true"/"yes", ou boolean true.
+    // A comparação direta `=== 1` nunca dá match quando chega como string "1",
+    // então normalizamos tudo para string maiúscula antes de comparar.
+    function isCanceledFlag(v) {
+      if (v === true) return true
+      if (v == null) return false
+      var s = String(v).trim().toUpperCase()
+      return s === '1' || s === 'Y' || s === 'S' || s === 'SIM' || s === 'TRUE' || s === 'YES'
+    }
+
     // Extrai o array de items da resposta da Saipos, tentando múltiplos níveis
     // de aninhamento comuns em APIs REST (PostgREST, etc.). O /v1/search_sales
     // retorna um array direto no topo, mas mantemos a flexibilidade.
@@ -559,18 +571,11 @@ routerAdd(
         continue
       }
 
-      // Cancelamento vem como "Y"/"N" no search_sales.
+      // Cancelamento: o campo `canceled` da Saipos chega como string "1"
+      // (cancelado) ou "0" (ativo), mas também pode vir como número 1, "Y",
+      // "S", "true" ou boolean. isCanceledFlag normaliza todos esses formatos.
       var recCanceled = rec.canceled || rec.cancelado || rec.canceled_sn || rec.is_canceled || ''
-      var recIsCanceled =
-        recCanceled === true ||
-        recCanceled === 'Y' ||
-        recCanceled === 'y' ||
-        recCanceled === 'S' ||
-        recCanceled === 'SIM' ||
-        recCanceled === 'true' ||
-        recCanceled === 'yes' ||
-        recCanceled === 1
-      if (recIsCanceled) continue
+      if (isCanceledFlag(recCanceled)) continue
 
       var histories = Array.isArray(rec.histories) ? rec.histories : null
       if (histories) {
@@ -593,17 +598,7 @@ routerAdd(
           entry.está_cancelado ||
           entry.is_canceled ||
           ''
-        if (
-          canceled === true ||
-          canceled === 'Y' ||
-          canceled === 'y' ||
-          canceled === 'S' ||
-          canceled === 'SIM' ||
-          canceled === 'true' ||
-          canceled === 'yes' ||
-          canceled === 1
-        )
-          continue
+        if (isCanceledFlag(canceled)) continue
 
         // Canal: partner_sale é um OBJETO com desc_store_partner (nome do
         // canal: "iFood", "WhatsApp", "Cardápio Web", ...). Se o mapChannel NÃO
