@@ -75,6 +75,11 @@ routerAdd(
       wpp: 'WhatsApp',
       telefone: 'Telefone',
       tel: 'Telefone',
+      'tel.': 'Telefone',
+      telefonico: 'Telefone',
+      telefônico: 'Telefone',
+      ligação: 'Telefone',
+      ligacao: 'Telefone',
       phone: 'Telefone',
       'central de pedidos': 'Central de Pedidos',
       'central pedidos': 'Central de Pedidos',
@@ -111,6 +116,20 @@ routerAdd(
           .logger()
           .info('Saipos channel map: "' + original + '" -> "' + CHANNEL_MAP[c] + '" (match exato)')
         return CHANNEL_MAP[c]
+      }
+
+      // 1b) Fallback "Telefone": a API da Saipos retorna variações como
+      //     "Telefone - Loja X", "Telefone 2", "telefone (ramal)" que não têm
+      //     chave exata no CHANNEL_MAP. Se o nome do parceiro COMEÇAR com
+      //     "telefone" (case-insensitive), classificamos como "Telefone".
+      //     Observação: "tel." e "telefonico"/"telefônico" são chaves exatas
+      //     (já tratadas acima); este fallback cobre apenas o prefixo "telefone"
+      //     seguido de outro texto.
+      if (c.indexOf('telefone') === 0) {
+        $app
+          .logger()
+          .info('Saipos channel map: "' + original + '" -> "Telefone" (prefixo "telefone")')
+        return 'Telefone'
       }
 
       // 2) Substring APENAS para chaves com 2+ palavras — elas são específicas
