@@ -149,41 +149,67 @@ routerAdd(
 
     // Extrai o canal de venda de um item do /v1/search_sales.
     // partner_sale é um OBJETO (não string) cujo desc_store_partner traz o nome
-    // do canal/parceiro ("iFood", "WhatsApp", "Cardápio Web", ...). Há também
+    // do canal/parceiro ("iFood", "WhatsApp", "Cardápio Web", ...). Para pedidos
+    // de delivery (iFood, 99Food, etc.), o nome do parceiro pode estar em
+    // partner_delivery.desc_store_partner em vez de partner_sale. Há também
     // campos legados (channel, canal, origem, ...).
     //
     // REGRA:
     // 1) partner_sale existe (desc_store_partner não vazio) e mapChannel
     //    reconhece -> retorna o canal mapeado.
-    // 2) partner_sale existe (desc_store_partner não vazio) mas mapChannel NÃO
-    //    reconhece -> retorna '' (vazio) e PULA a venda, independentemente do
-    //    id_sale_type. O parceiro é registrado em unmappedPartners para
-    //    diagnóstico. Isso garante que vendas com parceiro identificável de
-    //    outra loja/CNPJ (ex: "Alecrim - Lanches - Saudáveis") sejam ignoradas
-    //    mesmo quando vêm com id_sale_type 2/3/4.
-    // 3) partner_sale NÃO existe (null/undefined/vazio) + id_sale_type 2, 3 ou 4
-    //    (Ficha/Salão/Balcão) -> retorna "Loja / Restaurante". Esses tipos de
-    //    consumo presencial chegam da Saipos SEM partner_sale reconhecível — só
-    //    têm id_sale_type. Sem este fallback o sync produziria ZERO registros de
-    //    loja. Apenas vendas SEM parceiro algum caem aqui.
+    // 2) partner_sale NÃO traz nome reconhecível (ausente, vazio ou não
+    //    mapeado) -> tenta partner_delivery.desc_store_partner. Se mapChannel
+    //    reconhecer, retorna o canal mapeado. Parceiros não reconhecidos de
+    //    AMBAS as fontes (partner_sale e partner_delivery) são registrados em
+    //    unmappedPartners para diagnóstico.
+    // 3) Se partner_delivery existir com nome mas NÃO for reconhecido pelo
+    //    mapChannel -> retorna '' (vazio) e PULA a venda, independentemente do
+    //    id_sale_type. Ou seja: havendo um partner_delivery identificável mas
+    //    desconhecido, não cai no fallback de "Loja / Restaurante".
+    // 4) Se AMBAS as fontes (partner_sale e partner_delivery) falharem (ausentes,
+    //    vazias ou não reconhecidas sem nome identificável em partner_delivery),
+    //    segue a regra de fallback: id_sale_type 2, 3 ou 4 (Ficha/Salão/Balcão)
+    //    -> "Loja / Restaurante". Esses tipos de consumo presencial chegam da
+    //    Saipos SEM partner_sale/partner_delivery reconhecível — só têm
+    //    id_sale_type. Sem este fallback o sync produziria ZERO registros de
+    //    loja. Demais id_sale_type -> venda pulada.
     var STORE_SALE_TYPES = { 2: true, 3: true, 4: true }
 
     function extractChannel(entry, unmappedPartners) {
-      // 1) e 2) partner_sale presente (objeto com desc_store_partner não vazio).
+      // 1) partner_sale presente (objeto com desc_store_partner não vazio).
+      //    Se mapChannel reconhecer, retorna o canal. Se houver nome mas não for
+      //    reconhecido, registra em unmappedPartners e tenta partner_delivery
+      //    antes de pular definitivamente.
       var ps = entry.partner_sale
       if (ps && typeof ps === 'object') {
         var pn = ps.desc_store_partner || ps.partner || ps.name || ''
         if (pn) {
           var mapped = mapChannel(pn)
           if (mapped) return mapped
-          // Parceiro identificável mas NÃO reconhecido pelo mapChannel: registra
-          // para diagnóstico e PULA a venda (retorna vazio) independentemente do
-          // id_sale_type. Não cai no fallback de "Loja / Restaurante".
           if (unmappedPartners) unmappedPartners.add(pn)
+        }
+      }
+
+      // 2) partner_delivery como fonte alternativa. Para pedidos de delivery
+      //    (iFood, 99Food, etc.), o nome do parceiro pode estar em
+      //    partner_delivery.desc_store_partner e não em partner_sale. Quando
+      //    partner_sale vem vazio ou sem nome reconhecível, tentamos aqui.
+      var pd = entry.partner_delivery
+      if (pd && typeof pd === 'object') {
+        var pdn = pd.desc_store_partner || pd.partner || pd.name || ''
+        if (pdn) {
+          var pdMapped = mapChannel(pdn)
+          if (pdMapped) return pdMapped
+          // Parceiro identificável em partner_delivery mas NÃO reconhecido pelo
+          // mapChannel: registra para diagnóstico e PULA a venda (retorna vazio)
+          // independentemente do id_sale_type. Não cai no fallback de
+          // "Loja / Restaurante".
+          if (unmappedPartners) unmappedPartners.add(pdn)
           return ''
         }
       }
-      // 3) partner_sale AUSENTE — tenta campos legados antes do fallback.
+
+      // 3) Campos legados antes do fallback por id_sale_type.
       var legacy =
         entry.channel ||
         entry.channel_name ||
@@ -196,9 +222,11 @@ routerAdd(
         var lm = mapChannel(legacy)
         if (lm) return lm
       }
-      // Fallback por id_sale_type: APENAS 2 (Ficha), 3 (Salão) e 4 (Balcão)
-      // viram "Loja / Restaurante". Só chegamos aqui quando NÃO há partner_sale
-      // (nem legado) reconhecível. Demais id_sale_type -> venda pulada.
+
+      // 4) Fallback por id_sale_type: APENAS 2 (Ficha), 3 (Salão) e 4 (Balcão)
+      //    viram "Loja / Restaurante". Só chegamos aqui quando NÃO há
+      //    partner_sale nem partner_delivery (nem legado) reconhecível.
+      //    Demais id_sale_type -> venda pulada.
       var saleType = entry.id_sale_type
       if (saleType != null && STORE_SALE_TYPES[saleType]) {
         return 'Loja / Restaurante'
@@ -601,11 +629,12 @@ routerAdd(
           ''
         if (isCanceledFlag(canceled)) continue
 
-        // Canal: partner_sale é um OBJETO com desc_store_partner (nome do
-        // canal: "iFood", "WhatsApp", "Cardápio Web", ...). Se o mapChannel NÃO
-        // reconhecer um parceiro PRESENTE, a venda é PULADA (inclusive quando
-        // id_sale_type é 2/3/4). O fallback "Loja / Restaurante" só vale quando
-        // NÃO há partner_sale algum e id_sale_type é 2/3/4 (Ficha/Salão/Balcão).
+        // Canal: extractChannel tenta partner_sale.desc_store_partner primeiro;
+        // se não houver nome reconhecível, tenta partner_delivery.desc_store_partner
+        // (fonte onde vêm os parceiros de delivery como iFood, 99Food, ...). Se
+        // ambas falharem, usa o fallback por id_sale_type 2/3/4 (Ficha/Salão/Balcão)
+        // -> "Loja / Restaurante". Parceiros não reconhecidos de AMBAS as fontes
+        // são registrados em unmappedPartners para diagnóstico.
         var channel = extractChannel(entry, unmappedPartners)
         if (!channel) {
           skippedUnrecognizedPartner++
