@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom'
-import { LayoutDashboard, ClipboardList, Target, LineChart, LogOut } from 'lucide-react'
+import { LayoutDashboard, ClipboardList, Target, LineChart, Users, LogOut } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/hooks/use-auth'
 import {
@@ -22,6 +22,7 @@ const navItems = [
   { title: 'Vendas Diárias', icon: ClipboardList, url: '/vendas-diarias' },
   { title: 'Metas', icon: Target, url: '/metas' },
   { title: 'Histórico', icon: LineChart, url: '/historico' },
+  { title: 'Usuários', icon: Users, url: '/usuarios', adminOnly: true },
 ]
 
 export function AppSidebar() {
@@ -32,6 +33,13 @@ export function AppSidebar() {
   const handleLinkClick = () => {
     setOpenMobile(false)
   }
+
+  // O item "Usuários" só aparece para administradores.
+  const isAdminUser =
+    typeof (user as any)?.isSuperuser === 'function' && (user as any).isSuperuser()
+      ? true
+      : (user as any)?.role === 'admin'
+  const visibleNavItems = navItems.filter((item: any) => !item.adminOnly || isAdminUser)
 
   return (
     <Sidebar className="border-r border-border/50">
@@ -45,7 +53,7 @@ export function AppSidebar() {
         <SidebarGroup>
           <SidebarGroupContent className="pt-4">
             <SidebarMenu>
-              {navItems.map((item) => (
+              {visibleNavItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild isActive={location.pathname === item.url}>
                     <Link

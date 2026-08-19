@@ -29,6 +29,8 @@ export function Header() {
         return 'Gestão de Metas'
       case '/historico':
         return 'Histórico'
+      case '/usuarios':
+        return 'Usuários'
       default:
         return ''
     }
