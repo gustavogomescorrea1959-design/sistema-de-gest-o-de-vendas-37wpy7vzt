@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { format, getDaysInMonth, getDate } from 'date-fns'
+import { format, getDaysInMonth } from 'date-fns'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { getGoals, getDailySalesByMonth } from '@/services/api'
 import { useRealtime } from '@/hooks/use-realtime'
@@ -114,12 +114,6 @@ export default function Dashboard() {
     const ticket = totalOrders > 0 ? totalRevenue / totalOrders : 0
     const progress = totalGoalRevenue > 0 ? (totalRevenue / totalGoalRevenue) * 100 : 0
 
-    const daysInM = getDaysInMonth(new Date(`${monthParam}-02T00:00:00`))
-    const isCurrentMonth = monthParam === format(new Date(), 'yyyy-MM')
-    const daysPassed = isCurrentMonth ? Math.max(1, getDate(new Date())) : daysInM
-    const projRevenue = (totalRevenue / daysPassed) * daysInM
-    const projOrders = Math.round((totalOrders / daysPassed) * daysInM)
-
     const deliveryOrders = DELIVERY_CHANNELS.reduce(
       (acc, ch) => acc + (channelStats[ch]?.orders ?? 0),
       0,
@@ -147,6 +141,8 @@ export default function Dashboard() {
 
     const totalProjection =
       workingDaysPassed > 0 ? (totalRevenue / workingDaysPassed) * totalWorkingDays : 0
+    const totalOrdersProjection =
+      workingDaysPassed > 0 ? Math.round((totalOrders / workingDaysPassed) * totalWorkingDays) : 0
 
     return {
       totalOrders,
@@ -155,13 +151,15 @@ export default function Dashboard() {
       ticket,
       progress,
       channelStats,
-      projRevenue,
-      projOrders,
+      projRevenue: totalProjection,
+      projOrders: totalOrdersProjection,
       deliveryOrders,
       deliveryRevenue,
       deliveryTicket,
       channelProjections,
       totalProjection,
+      workingDaysPassed,
+      totalWorkingDays,
     }
   }, [sales, goals, monthParam])
 
@@ -222,6 +220,9 @@ export default function Dashboard() {
             <p className="text-xs text-muted-foreground mt-1">
               Projeção: {formatCurrency(metrics.projRevenue)}
             </p>
+            <p className="text-[11px] text-muted-foreground/70 mt-0.5">
+              {metrics.workingDaysPassed} de {metrics.totalWorkingDays} dias úteis
+            </p>
           </CardContent>
         </Card>
 
@@ -236,6 +237,9 @@ export default function Dashboard() {
             <div className="text-2xl font-bold">{metrics.totalOrders}</div>
             <p className="text-xs text-muted-foreground mt-1">
               Projeção: {metrics.projOrders} pedidos
+            </p>
+            <p className="text-[11px] text-muted-foreground/70 mt-0.5">
+              {metrics.workingDaysPassed} de {metrics.totalWorkingDays} dias úteis
             </p>
           </CardContent>
         </Card>
