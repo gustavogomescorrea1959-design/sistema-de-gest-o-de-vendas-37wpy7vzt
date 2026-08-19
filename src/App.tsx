@@ -9,6 +9,7 @@ import Index from './pages/Index'
 import Dashboard from './pages/Dashboard'
 import VendasDiarias from './pages/VendasDiarias'
 import Metas from './pages/Metas'
+import Historico from './pages/Historico'
 import NotFound from './pages/NotFound'
 import Layout from './components/Layout'
 
@@ -26,6 +27,7 @@ const App = () => (
               <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/vendas-diarias" element={<VendasDiarias />} />
               <Route path="/metas" element={<Metas />} />
+              <Route path="/historico" element={<Historico />} />
             </Route>
           </Route>
           <Route path="*" element={<NotFound />} />

@@ -15,6 +15,9 @@ export function Header() {
   const location = useLocation()
   const [searchParams, setSearchParams] = useSearchParams()
   const [settingsOpen, setSettingsOpen] = useState(false)
+  // Páginas com período fixo (ex.: Histórico jan–ago 2026) não mostram a
+  // navegação de mês do header.
+  const showMonthNav = location.pathname !== '/historico'
 
   const getPageTitle = () => {
     switch (location.pathname) {
@@ -24,6 +27,8 @@ export function Header() {
         return 'Vendas Diárias'
       case '/metas':
         return 'Gestão de Metas'
+      case '/historico':
+        return 'Histórico'
       default:
         return ''
     }
@@ -51,32 +56,36 @@ export function Header() {
         </div>
 
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="icon" onClick={prevMonth} className="h-8 w-8">
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
-
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button
-                variant="outline"
-                className={cn('h-8 min-w-[140px] justify-center capitalize font-medium')}
-              >
-                <CalendarIcon className="mr-2 h-4 w-4 text-muted-foreground" />
-                {format(currentDate, 'MMMM yyyy', { locale: ptBR })}
+          {showMonthNav ? (
+            <>
+              <Button variant="outline" size="icon" onClick={prevMonth} className="h-8 w-8">
+                <ChevronLeft className="h-4 w-4" />
               </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-auto p-0" align="end">
-              <div className="p-4 text-center text-sm text-muted-foreground">
-                Use as setas para navegar entre os meses.
-              </div>
-            </PopoverContent>
-          </Popover>
 
-          <Button variant="outline" size="icon" onClick={nextMonth} className="h-8 w-8">
-            <ChevronRight className="h-4 w-4" />
-          </Button>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className={cn('h-8 min-w-[140px] justify-center capitalize font-medium')}
+                  >
+                    <CalendarIcon className="mr-2 h-4 w-4 text-muted-foreground" />
+                    {format(currentDate, 'MMMM yyyy', { locale: ptBR })}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="end">
+                  <div className="p-4 text-center text-sm text-muted-foreground">
+                    Use as setas para navegar entre os meses.
+                  </div>
+                </PopoverContent>
+              </Popover>
 
-          <div className="w-px h-6 bg-border mx-1" />
+              <Button variant="outline" size="icon" onClick={nextMonth} className="h-8 w-8">
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+
+              <div className="w-px h-6 bg-border mx-1" />
+            </>
+          ) : null}
 
           <Button
             variant="ghost"

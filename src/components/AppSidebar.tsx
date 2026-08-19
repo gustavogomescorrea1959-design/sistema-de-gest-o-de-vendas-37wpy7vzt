@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom'
-import { LayoutDashboard, ClipboardList, Target, LogOut } from 'lucide-react'
+import { LayoutDashboard, ClipboardList, Target, LineChart, LogOut } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/hooks/use-auth'
 import {
@@ -21,6 +21,7 @@ const navItems = [
   { title: 'Dashboard', icon: LayoutDashboard, url: '/dashboard' },
   { title: 'Vendas Diárias', icon: ClipboardList, url: '/vendas-diarias' },
   { title: 'Metas', icon: Target, url: '/metas' },
+  { title: 'Histórico', icon: LineChart, url: '/historico' },
 ]
 
 export function AppSidebar() {

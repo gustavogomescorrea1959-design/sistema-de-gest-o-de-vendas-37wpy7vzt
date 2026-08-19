@@ -22,6 +22,19 @@ export const getDailySalesByDate = async (date: string): Promise<DailySale[]> =>
   })
 }
 
+// Histórico: todas as vendas diárias dentro de um intervalo de datas
+// (inclusive). Usado pelo dashboard Histórico (jan–ago 2026) para agrupar
+// faturamento por mês e canal.
+export const getDailySalesByDateRange = async (
+  startDate: string,
+  endDate: string,
+): Promise<DailySale[]> => {
+  return pb.collection('daily_sales').getFullList<DailySale>({
+    filter: `date >= "${startDate}" && date <= "${endDate}"`,
+    sort: 'date',
+  })
+}
+
 export const saveDailySale = async (data: Partial<DailySale>) => {
   if (data.id) {
     return pb.collection('daily_sales').update<DailySale>(data.id, data)

@@ -62,3 +62,37 @@ export async function syncSaipos(startDate: string, endDate: string): Promise<Sy
 export async function testSaiposToken(): Promise<SaiposTokenTest> {
   return pb.send('/backend/v1/sync-saipos/test', { method: 'GET' })
 }
+
+export interface SyncSaiposAll2026Result {
+  success: boolean
+  period: { startDate: string; endDate: string }
+  insertedCount: number
+  updatedCount: number
+  skippedCount: number
+  skippedOtherStoreCount?: number
+  skippedUnrecognizedPartnerCount?: number
+  segments?: number
+  totalSales?: number
+  saveErrors?: number
+  months?: Array<{
+    month: string
+    inserted: number
+    updated: number
+    revenue: number
+    orders: number
+  }>
+  unmappedPartners?: string[]
+  diagnostic?: SaiposDiagnostic | null
+  error?: string
+}
+
+// Dispara a sincronização em massa de janeiro a agosto de 2026 no backend.
+// Reutiliza a mesma lógica do endpoint manual (segmentos de 15 dias, mesmos
+// canais, filtros, tratamento de cancelados, id_store = 29090).
+export async function syncSaiposAll2026(): Promise<SyncSaiposAll2026Result> {
+  return pb.send('/backend/v1/sync-saipos-all-2026', {
+    method: 'POST',
+    body: JSON.stringify({ startDate: '2026-01-01', endDate: '2026-08-31' }),
+    headers: { 'Content-Type': 'application/json' },
+  })
+}
