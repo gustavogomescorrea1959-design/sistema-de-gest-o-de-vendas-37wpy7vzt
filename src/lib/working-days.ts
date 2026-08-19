@@ -18,8 +18,8 @@ export function getWorkingDaysInMonth(year: number, monthIndex: number): number 
   return count
 }
 
-export function getWorkingDaysPassed(year: number, monthIndex: number): number {
-  const today = new Date()
+export function getWorkingDaysPassed(year: number, monthIndex: number, untilDate?: Date): number {
+  const today = untilDate ?? new Date()
   const isCurrentMonth = today.getFullYear() === year && today.getMonth() === monthIndex
   if (!isCurrentMonth) {
     return getWorkingDaysInMonth(year, monthIndex)

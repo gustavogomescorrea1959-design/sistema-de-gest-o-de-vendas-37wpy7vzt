@@ -128,7 +128,16 @@ export default function Dashboard() {
     const yearNum = parseInt(yearStr, 10)
     const monthIdx = parseInt(monthStr, 10) - 1
     const totalWorkingDays = getWorkingDaysInMonth(yearNum, monthIdx)
-    const workingDaysPassed = getWorkingDaysPassed(yearNum, monthIdx)
+
+    // Usa a última data com vendas em vez da data de hoje para que a
+    // projeção considere apenas os dias com dados reais. Se não houver
+    // vendas, mantém o comportamento atual (data de hoje).
+    const lastSaleDateStr =
+      sales.length > 0
+        ? sales.reduce((max, s) => (s.date > max ? s.date : max), sales[0].date)
+        : undefined
+    const lastSaleDate = lastSaleDateStr ? new Date(`${lastSaleDateStr}T00:00:00`) : undefined
+    const workingDaysPassed = getWorkingDaysPassed(yearNum, monthIdx, lastSaleDate)
 
     const channelProjections = CHANNELS.reduce(
       (acc, ch) => {
