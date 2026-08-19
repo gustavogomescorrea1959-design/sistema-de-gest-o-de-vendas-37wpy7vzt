@@ -3,16 +3,20 @@
  * Provides offline support by caching the app shell and static assets.
  *
  * Update flow:
- *  - The browser installs a new SW in the background. It does NOT activate
- *    automatically (no skipWaiting on install) so the running app keeps working.
- *  - The client (main.tsx) detects the waiting worker via `registration.updatefound`
- *    and shows the "Nova versão disponível" banner.
- *  - When the user taps "Atualizar", the client posts SKIP_WAITING to the waiting
- *    worker, which calls self.skipWaiting() to activate immediately. The client
- *    then reloads on `controllerchange` to pick up the new version.
+ *  - The browser installs a new SW and calls self.skipWaiting() during install
+ *    so it activates immediately (bypassing the waiting state). This is required
+ *    to recover iOS/Safari users stuck on a cached old sw.js.
+ *  - activate() clears every old cache (different CACHE_NAME) and calls
+ *    clients.claim() so the new worker takes over open tabs right away.
+ *  - The client (main.tsx) registers with a cache-busting query (?v=3) so
+ *    Safari fetches a fresh sw.js (bypassing its HTTP cache of the old v1),
+ *    and calls registration.update() on load to force an immediate check.
+ *    index.html also unregisters every stuck worker before React boots.
+ *  - The "Nova versão disponível" banner still works: ServiceWorkerUpdater
+ *    listens for updatefound and can still post SKIP_WAITING (already active).
  */
 
-const CACHE_NAME = 'alecrim-vendas-v1'
+const CACHE_NAME = 'alecrim-vendas-v3'
 const SKIP_WAITING_MSG = 'SKIP_WAITING'
 
 // App shell: the main pages and key assets are precached on install so the
@@ -31,9 +35,10 @@ self.addEventListener('install', (event) => {
               .catch((err) => console.warn('[SW] precache failed for', url, err)),
           ),
         ),
-      ),
-    // Intentionally NOT calling self.skipWaiting() here: the new worker stays
-    // in the "waiting" state until the user accepts the update banner.
+      )
+      // Activate immediately so stuck iOS/Safari clients pick up the new
+      // version without waiting for the update banner.
+      .then(() => self.skipWaiting()),
   )
 })
 

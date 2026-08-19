@@ -140,7 +140,7 @@ export function ServiceWorkerUpdater() {
 
     let registration: ServiceWorkerRegistration | undefined
     navigator.serviceWorker
-      .register('/sw.js')
+      .register('/sw.js?v=3')
       .then((reg) => {
         registration = reg
         // A new SW has appeared in the browser; follow it through install.

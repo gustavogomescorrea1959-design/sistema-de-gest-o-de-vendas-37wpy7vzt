@@ -15,6 +15,22 @@
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="Alecrim" />
+    <!--
+      Force-unregister every service worker BEFORE the app boots. Safari on iOS
+      keeps an old sw.js pinned in its HTTP cache and keeps re-serving it, which
+      traps users on a stale app version. Tearing down all registrations here
+      lets main.tsx register a fresh sw.js?v=3 (skipWaiting + clients.claim).
+    -->
+    <script>
+      (function () {
+        try {
+          if (!('serviceWorker' in navigator)) return
+          navigator.serviceWorker.getRegistrations().then(function (regs) {
+            regs.forEach(function (reg) { reg.unregister() })
+          })
+        } catch (e) {}
+      })()
+    </script>
   </head>
 
   <body>
