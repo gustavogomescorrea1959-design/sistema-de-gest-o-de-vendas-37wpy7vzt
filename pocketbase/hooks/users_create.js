@@ -79,14 +79,14 @@ routerAdd(
     }
 
     return e.json(200, {
-      id: record.getId(),
-      email: record.getEmail(),
-      name: record.getString('name'),
-      role: record.getString('role'),
-      active: record.getBool('active'),
-      verified: record.getBool('verified'),
-      created: record.getString('created'),
-      updated: record.getString('updated'),
+      id: record.get('id'),
+      email: record.get('email'),
+      name: record.get('name'),
+      role: record.get('role'),
+      active: record.get('active'),
+      verified: record.get('verified'),
+      created: record.get('created'),
+      updated: record.get('updated'),
     })
   },
   $apis.requireAuth(),
