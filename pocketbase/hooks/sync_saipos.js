@@ -981,6 +981,9 @@ routerAdd(
 // funcionando normalmente — este cron é adicional.
 // ===========================================================================
 cronAdd('saipos_daily_sync', '0 7 * * *', () => {
+  var nowUtc = new Date().toISOString()
+  var nowBrt = new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })
+  console.log('[Saipos cron] Disparo: UTC = ' + nowUtc + ', BRT = ' + nowBrt)
   $app.logger().info('Saipos cron: iniciando sincronização diária automática')
 
   // --- Token (igual ao endpoint manual) ---
@@ -1481,6 +1484,7 @@ cronAdd('saipos_daily_sync', '0 7 * * *', () => {
     var endISO = toISO(
       new Date(seg.end.getTime() + 23 * 60 * 60 * 1000 + 59 * 60 * 1000 + 59 * 1000),
     )
+    console.log('[Saipos cron] Consultando Saipos: start = ' + startISO + ', end = ' + endISO)
     var segResult = fetchSegment(startISO, endISO)
     if (segResult.error) {
       $app
@@ -1663,11 +1667,11 @@ cronAdd('saipos_daily_sync', '0 7 * * *', () => {
     )
 
   // --- Resumo de parceiros (diagnóstico, idêntico ao endpoint manual) ---
-  console.log('[Saipos cron] Resumo de parceiros:')
   var _partnerNames = Array.from(partnerSummary)
   if (_partnerNames.length === 0) {
-    console.log('[Saipos cron]   (nenhum parceiro encontrado)')
+    console.log('[Saipos cron] Resumo de parceiros: (nenhum parceiro encontrado)')
   } else {
+    console.log('[Saipos cron] Resumo de parceiros:')
     for (var _pi = 0; _pi < _partnerNames.length; _pi++) {
       var _partnerName = _partnerNames[_pi]
       var _mappedChannel = mapChannel(_partnerName)
@@ -1761,6 +1765,14 @@ cronAdd('saipos_daily_sync', '0 7 * * *', () => {
         )
     }
   }
+
+  // --- Logs de diagnóstico solicitados após o processamento ---
+  console.log('[Saipos cron] Vendas recebidas da Saipos: ' + allRecords.length)
+  console.log(
+    '[Saipos cron] Parceiros encontrados: ' +
+      (_partnerNames.length > 0 ? _partnerNames.join(', ') : '(nenhum)'),
+  )
+  console.log('[Saipos cron] Registros inseridos/atualizados no banco: ' + (inserted + updated))
 
   // --- Resultado logado (inseridos, atualizados, pulados) ---
   $app

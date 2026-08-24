@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-24T12:54:33.538Z",
+  "generatedAt": "2026-08-24T14:27:13.749Z",
   "collections": [
     {
       "name": "users",
@@ -29,29 +29,21 @@
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": [
-            "onCreate"
-          ]
+          "autodateTriggers": ["onCreate"]
         },
         {
           "name": "updated",
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": [
-            "onCreate",
-            "onUpdate"
-          ]
+          "autodateTriggers": ["onCreate", "onUpdate"]
         },
         {
           "name": "role",
           "type": "select",
           "required": false,
           "system": false,
-          "selectValues": [
-            "admin",
-            "user"
-          ]
+          "selectValues": ["admin", "user"]
         },
         {
           "name": "active",
@@ -127,24 +119,17 @@
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": [
-            "onCreate"
-          ]
+          "autodateTriggers": ["onCreate"]
         },
         {
           "name": "updated",
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": [
-            "onCreate",
-            "onUpdate"
-          ]
+          "autodateTriggers": ["onCreate", "onUpdate"]
         }
       ],
-      "indexes": [
-        "CREATE UNIQUE INDEX idx_goals_channel ON goals (channel)"
-      ]
+      "indexes": ["CREATE UNIQUE INDEX idx_goals_channel ON goals (channel)"]
     },
     {
       "name": "daily_sales",
@@ -202,19 +187,14 @@
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": [
-            "onCreate"
-          ]
+          "autodateTriggers": ["onCreate"]
         },
         {
           "name": "updated",
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": [
-            "onCreate",
-            "onUpdate"
-          ]
+          "autodateTriggers": ["onCreate", "onUpdate"]
         }
       ],
       "indexes": [
@@ -250,24 +230,17 @@
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": [
-            "onCreate"
-          ]
+          "autodateTriggers": ["onCreate"]
         },
         {
           "name": "updated",
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": [
-            "onCreate",
-            "onUpdate"
-          ]
+          "autodateTriggers": ["onCreate", "onUpdate"]
         }
       ],
-      "indexes": [
-        "CREATE UNIQUE INDEX idx_settings_key ON settings (key)"
-      ]
+      "indexes": ["CREATE UNIQUE INDEX idx_settings_key ON settings (key)"]
     }
   ]
 }
