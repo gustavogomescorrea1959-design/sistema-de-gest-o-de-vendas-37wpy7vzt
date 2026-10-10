@@ -249,6 +249,9 @@ routerAdd(
       var res = null
       for (var attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
         res = null
+        var isTimeoutErr = false
+        var isConnErr = false
+        var caughtErrMsg = ''
         try {
           res = $http.send({
             url: url,
@@ -260,22 +263,50 @@ routerAdd(
             timeout: timeoutSecs,
           })
         } catch (err) {
-          var errMsg = err && err.message ? String(err.message) : ''
-          var lowErr = errMsg.toLowerCase()
+          caughtErrMsg = err && err.message ? String(err.message) : ''
+          var lowErr = caughtErrMsg.toLowerCase()
           if (
             lowErr.indexOf('deadline') >= 0 ||
             lowErr.indexOf('timeout') >= 0 ||
             lowErr.indexOf('context deadline') >= 0
           ) {
+            isTimeoutErr = true
+          } else {
+            isConnErr = true
+          }
+        }
+
+        if (isTimeoutErr || isConnErr) {
+          if (attempt < MAX_ATTEMPTS - 1) {
+            $app
+              .logger()
+              .warn(
+                'Saipos 2026 requisição falhou (' +
+                  (isTimeoutErr ? 'timeout' : 'conexão') +
+                  ') na tentativa ' +
+                  (attempt + 1) +
+                  '/' +
+                  MAX_ATTEMPTS +
+                  ' (' +
+                  caughtErrMsg +
+                  ') — retryando em 3s',
+              )
+            sleep(3000)
+            continue
+          }
+          if (isTimeoutErr) {
             return {
               errorResponse: e.json(504, {
-                error: 'Timeout: a API do Saipos demorou demais para responder. Tente novamente.',
+                error:
+                  'Timeout: a API do Saipos demorou demais para responder após ' +
+                  MAX_ATTEMPTS +
+                  ' tentativas. Tente novamente em alguns instantes.',
               }),
             }
           }
           return {
             errorResponse: e.json(503, {
-              error: 'Erro de conexão com a API do Saipos: ' + errMsg,
+              error: 'Erro de conexão com a API do Saipos: ' + caughtErrMsg,
             }),
           }
         }
@@ -351,7 +382,7 @@ routerAdd(
           '&p_offset=' +
           offset
 
-        var requestResult = requestWithRetry(apiUrl, 60)
+        var requestResult = requestWithRetry(apiUrl, 90)
         if (requestResult.errorResponse) return { errorResponse: requestResult.errorResponse }
         var res = requestResult.res
 
@@ -433,6 +464,8 @@ routerAdd(
           hasMore = false
         } else {
           offset += limit
+          // Pausa preventiva de 300ms entre páginas do mesmo segmento
+          sleep(300)
         }
       }
 
@@ -490,6 +523,11 @@ routerAdd(
       if (segResult.errorResponse) return segResult.errorResponse
       allRecords = allRecords.concat(segResult.items)
       if (firstPageDiagnostic === null) firstPageDiagnostic = segResult.diagnostic
+
+      // Pausa entre segmentos de 15 dias para liberar pool na Saipos
+      if (si < segments.length - 1) {
+        sleep(600)
+      }
     }
 
     // --- Mapeamento da resposta para daily_sales (igual ao endpoint manual) ---

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { format, subDays } from 'date-fns'
+import { format, subDays, startOfMonth } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import {
   Dialog,
@@ -46,7 +46,7 @@ interface SyncSaiposDialogProps {
 
 export function SyncSaiposDialog({ open, onOpenChange, onSuccess }: SyncSaiposDialogProps) {
   const [date, setDate] = useState<{ from?: Date; to?: Date }>({
-    from: subDays(new Date(), 30),
+    from: new Date(),
     to: new Date(),
   })
   const [syncing, setSyncing] = useState(false)
@@ -453,8 +453,50 @@ export function SyncSaiposDialog({ open, onOpenChange, onSuccess }: SyncSaiposDi
           </Accordion>
         )}
 
-        <div className="space-y-2">
-          <Label>Período</Label>
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <Label>Período</Label>
+            <div className="flex items-center gap-1.5 text-xs">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-7 px-2 text-xs"
+                onClick={() => setDate({ from: new Date(), to: new Date() })}
+              >
+                Hoje
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-7 px-2 text-xs"
+                onClick={() =>
+                  setDate({ from: subDays(new Date(), 1), to: subDays(new Date(), 1) })
+                }
+              >
+                Ontem
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-7 px-2 text-xs"
+                onClick={() => setDate({ from: startOfMonth(new Date()), to: new Date() })}
+              >
+                Mês Atual
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-7 px-2 text-xs"
+                onClick={() => setDate({ from: subDays(new Date(), 30), to: new Date() })}
+              >
+                Últimos 30d
+              </Button>
+            </div>
+          </div>
           <div className="flex flex-col sm:flex-row gap-2">
             <Popover>
               <PopoverTrigger asChild>

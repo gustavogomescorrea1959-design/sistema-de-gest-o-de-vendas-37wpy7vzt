@@ -52,7 +52,7 @@ routerAdd(
       'https://data.saipos.io/v1/search_sales' +
       '?p_date_column_filter=shift_date' +
       '&p_filter_date_start=' +
-      encodeURIComponent(pFilterDateStart) +
+      encodeURIComponent(pFilterDateEnd) +
       '&p_filter_date_end=' +
       encodeURIComponent(pFilterDateEnd) +
       '&p_limit=1&p_offset=0'
@@ -88,7 +88,7 @@ routerAdd(
             accept: 'application/json',
             Authorization: 'Bearer ' + token,
           },
-          timeout: 30,
+          timeout: 45,
         })
       } catch (err) {
         var errMsg = err && err.message ? String(err.message) : ''

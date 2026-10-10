@@ -24,17 +24,43 @@ export const getDailySalesByDate = async (date: string): Promise<DailySale[]> =>
 
 // Histórico: todas as vendas diárias dentro de um intervalo de datas
 // (inclusive). Usado pelo dashboard Histórico (jan–ago 2026) para agrupar
-// faturamento por mês e canal.
+// faturamento por mês e canal. Usa paginação manual com batch de 500 registros
+// e delay de 100ms para evitar HTTP 429 (rate limiting do PocketBase).
 export const getDailySalesByDateRange = async (
   startDate: string,
   endDate: string,
 ): Promise<DailySale[]> => {
-  return pb.collection('daily_sales').getFullList<DailySale>({
-    filter: `date >= "${startDate}" && date <= "${endDate}"`,
-    sort: 'date',
-  })
-}
+  const records: DailySale[] = []
+  const perPage = 500
+  let page = 1
+  let hasMore = true
 
+  while (hasMore) {
+    try {
+      const res = await pb.collection('daily_sales').getList<DailySale>(page, perPage, {
+        filter: `date >= "${startDate}" && date <= "${endDate}"`,
+        sort: 'date',
+      })
+      records.push(...res.items)
+      if (res.items.length < perPage || page >= res.totalPages) {
+        hasMore = false
+      } else {
+        page++
+        await new Promise((resolve) => setTimeout(resolve, 100))
+      }
+    } catch (err: unknown) {
+      const status = (err as { status?: number })?.status
+      if (status === 429) {
+        // Se atingir 429, aguarda 1 segundo e tenta a mesma página novamente
+        await new Promise((resolve) => setTimeout(resolve, 1000))
+        continue
+      }
+      throw err
+    }
+  }
+
+  return records
+}
 export const saveDailySale = async (data: Partial<DailySale>) => {
   if (data.id) {
     return pb.collection('daily_sales').update<DailySale>(data.id, data)

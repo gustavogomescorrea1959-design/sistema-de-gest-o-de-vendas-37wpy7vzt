@@ -349,12 +349,15 @@ routerAdd(
 
     // Realiza a requisição à API do Saipos com retry automático (até 3
     // tentativas) quando a resposta indicar erro PGRST003 ("Timed out
-    // acquiring connection from connection pool"). Aguarda 2s entre tentativas.
+    // acquiring connection from connection pool") ou timeout transitório.
     function requestWithRetry(url, timeoutSecs) {
       var MAX_ATTEMPTS = 3
       var res = null
       for (var attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
         res = null
+        var isTimeoutErr = false
+        var isConnErr = false
+        var caughtErrMsg = ''
         try {
           res = $http.send({
             url: url,
@@ -366,23 +369,50 @@ routerAdd(
             timeout: timeoutSecs,
           })
         } catch (err) {
-          var errMsg = err && err.message ? String(err.message) : ''
-          var lowErr = errMsg.toLowerCase()
+          caughtErrMsg = err && err.message ? String(err.message) : ''
+          var lowErr = caughtErrMsg.toLowerCase()
           if (
             lowErr.indexOf('deadline') >= 0 ||
             lowErr.indexOf('timeout') >= 0 ||
             lowErr.indexOf('context deadline') >= 0
           ) {
+            isTimeoutErr = true
+          } else {
+            isConnErr = true
+          }
+        }
+
+        if (isTimeoutErr || isConnErr) {
+          if (attempt < MAX_ATTEMPTS - 1) {
+            $app
+              .logger()
+              .warn(
+                'Saipos requisição falhou (' +
+                  (isTimeoutErr ? 'timeout' : 'conexão') +
+                  ') na tentativa ' +
+                  (attempt + 1) +
+                  '/' +
+                  MAX_ATTEMPTS +
+                  ' (' +
+                  caughtErrMsg +
+                  ') — retryando em 3s',
+              )
+            sleep(3000)
+            continue
+          }
+          if (isTimeoutErr) {
             return {
               errorResponse: e.json(504, {
                 error:
-                  'Timeout: a API do Saipos demorou demais para responder. Tente um período menor ou tente novamente.',
+                  'Timeout: a API do Saipos demorou demais para responder após ' +
+                  MAX_ATTEMPTS +
+                  ' tentativas. Tente um período menor (ex.: apenas o dia de hoje ou intervalo de poucos dias).',
               }),
             }
           }
           return {
             errorResponse: e.json(503, {
-              error: 'Erro de conexão com a API do Saipos: ' + errMsg,
+              error: 'Erro de conexão com a API do Saipos: ' + caughtErrMsg,
             }),
           }
         }
@@ -460,7 +490,7 @@ routerAdd(
           '&p_offset=' +
           offset
 
-        var requestResult = requestWithRetry(apiUrl, 60)
+        var requestResult = requestWithRetry(apiUrl, 90)
         if (requestResult.errorResponse) return { errorResponse: requestResult.errorResponse }
         var res = requestResult.res
 
@@ -546,6 +576,8 @@ routerAdd(
           hasMore = false
         } else {
           offset += limit
+          // Pausa preventiva de 300ms entre páginas do mesmo segmento
+          sleep(300)
         }
       }
 
@@ -606,6 +638,11 @@ routerAdd(
       if (segResult.errorResponse) return segResult.errorResponse
       allRecords = allRecords.concat(segResult.items)
       if (firstPageDiagnostic === null) firstPageDiagnostic = segResult.diagnostic
+
+      // Pausa entre segmentos para evitar sobrecarregar o pool da Saipos
+      if (si < segments.length - 1) {
+        sleep(500)
+      }
     }
 
     // --- Mapeamento da resposta para daily_sales ---
@@ -1251,6 +1288,9 @@ cronAdd('saipos_daily_sync', '0 7 * * *', () => {
       var res = null
       for (var attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
         res = null
+        var isTimeoutErr = false
+        var isConnErr = false
+        var caughtErrMsg = ''
         try {
           res = $http.send({
             url: url,
@@ -1262,18 +1302,46 @@ cronAdd('saipos_daily_sync', '0 7 * * *', () => {
             timeout: timeoutSecs,
           })
         } catch (err) {
-          var errMsg = err && err.message ? String(err.message) : ''
-          var lowErr = errMsg.toLowerCase()
+          caughtErrMsg = err && err.message ? String(err.message) : ''
+          var lowErr = caughtErrMsg.toLowerCase()
           if (
             lowErr.indexOf('deadline') >= 0 ||
             lowErr.indexOf('timeout') >= 0 ||
             lowErr.indexOf('context deadline') >= 0
           ) {
+            isTimeoutErr = true
+          } else {
+            isConnErr = true
+          }
+        }
+
+        if (isTimeoutErr || isConnErr) {
+          if (attempt < MAX_ATTEMPTS - 1) {
+            $app
+              .logger()
+              .warn(
+                'Saipos cron requisição falhou (' +
+                  (isTimeoutErr ? 'timeout' : 'conexão') +
+                  ') na tentativa ' +
+                  (attempt + 1) +
+                  '/' +
+                  MAX_ATTEMPTS +
+                  ' (' +
+                  caughtErrMsg +
+                  ') — retryando em 3s',
+              )
+            sleep(3000)
+            continue
+          }
+          if (isTimeoutErr) {
             return {
-              error: 'Timeout: a API do Saipos demorou demais para responder.',
+              error:
+                'Timeout: a API do Saipos demorou demais para responder após ' +
+                MAX_ATTEMPTS +
+                ' tentativas.',
             }
           }
-          return { error: 'Erro de conexão com a API do Saipos: ' + errMsg }
+          return { error: 'Erro de conexão com a API do Saipos: ' + caughtErrMsg }
         }
 
         var isPoolTimeout = false
@@ -1348,7 +1416,7 @@ cronAdd('saipos_daily_sync', '0 7 * * *', () => {
           '&p_offset=' +
           offset
 
-        var requestResult = requestWithRetry(apiUrl, 60)
+        var requestResult = requestWithRetry(apiUrl, 90)
         if (requestResult.error) return { error: requestResult.error }
         var res = requestResult.res
 

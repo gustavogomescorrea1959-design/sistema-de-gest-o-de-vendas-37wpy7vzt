@@ -177,6 +177,8 @@ export default function Historico() {
           monthsLine ? '\n' + monthsLine : ''
         }`,
       })
+      // Aguarda 300ms antes de recarregar para dar tempo do backend estabilizar
+      await new Promise((resolve) => setTimeout(resolve, 300))
       await loadData()
     } catch (err: unknown) {
       const e = err as ClientResponseError
@@ -186,7 +188,7 @@ export default function Historico() {
       if (status === 504) {
         title = 'Timeout / API demorou para responder'
         message =
-          'A API do Saipos demorou demais para responder. Tente novamente em alguns instantes.'
+          'A API do Saipos demorou demais para responder ao processar o período de 8 meses. Tente novamente em alguns instantes.'
       } else if (status === 0 || status === 503) {
         title = 'Erro de conexão com a Saipos'
       }
