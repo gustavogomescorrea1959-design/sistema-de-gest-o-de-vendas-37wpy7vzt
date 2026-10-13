@@ -34,11 +34,11 @@ routerAdd(
     }
     token = token.replace(/^Bearer\s+/i, '').trim()
 
-    // Período fixo: janeiro a agosto de 2026. Aceita override via body para
-    // flexibilidade, mas o padrão é exatamente o intervalo solicitado.
+    // Período de sincronização de 2026. Aceita override via body.
+    // Padrão atualizado para abranger até setembro/2026.
     var body = e.requestInfo().body || {}
     var startDateRaw = body.startDate || '2026-01-01'
-    var endDateRaw = body.endDate || '2026-08-31'
+    var endDateRaw = body.endDate || '2026-09-30'
 
     // --- Helpers (inline — cópia fiel do endpoint manual) ---
 

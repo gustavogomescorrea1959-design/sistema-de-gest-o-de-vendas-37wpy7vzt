@@ -89,10 +89,13 @@ export interface SyncSaiposAll2026Result {
 // Dispara a sincronização em massa de janeiro a agosto de 2026 no backend.
 // Reutiliza a mesma lógica do endpoint manual (segmentos de 15 dias, mesmos
 // canais, filtros, tratamento de cancelados, id_store = 29090).
-export async function syncSaiposAll2026(): Promise<SyncSaiposAll2026Result> {
+export async function syncSaiposAll2026(
+  startDate = '2026-01-01',
+  endDate = '2026-09-30',
+): Promise<SyncSaiposAll2026Result> {
   return pb.send('/backend/v1/sync-saipos-all-2026', {
     method: 'POST',
-    body: JSON.stringify({ startDate: '2026-01-01', endDate: '2026-08-31' }),
+    body: JSON.stringify({ startDate, endDate }),
     headers: { 'Content-Type': 'application/json' },
   })
 }

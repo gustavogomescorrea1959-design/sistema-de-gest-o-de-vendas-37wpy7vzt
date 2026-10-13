@@ -491,6 +491,15 @@ export function SyncSaiposDialog({ open, onOpenChange, onSuccess }: SyncSaiposDi
                 variant="outline"
                 size="sm"
                 className="h-7 px-2 text-xs"
+                onClick={() => setDate({ from: new Date(2026, 8, 1), to: new Date(2026, 8, 30) })}
+              >
+                Setembro/26
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-7 px-2 text-xs"
                 onClick={() => setDate({ from: subDays(new Date(), 30), to: new Date() })}
               >
                 Últimos 30d

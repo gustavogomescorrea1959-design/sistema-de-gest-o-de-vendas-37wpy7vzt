@@ -29,11 +29,11 @@ import { useRealtime } from '@/hooks/use-realtime'
 import { useToast } from '@/hooks/use-toast'
 import { CHANNELS, Channel, DailySale } from '@/types'
 
-// Período fixo: janeiro a agosto de 2026.
+// Período: janeiro a outubro de 2026 (inclui setembro e meses correntes).
 const START_DATE = '2026-01-01'
-const END_DATE = '2026-08-31'
+const END_DATE = '2026-10-31'
 
-// Lista canônica de meses do período (sempre exibidos no eixo X e na tabela).
+// Lista canônica de meses do período de 2026 (exibidos no eixo X e na tabela).
 const MONTHS = [
   { key: '2026-01', label: 'Jan' },
   { key: '2026-02', label: 'Fev' },
@@ -43,6 +43,8 @@ const MONTHS = [
   { key: '2026-06', label: 'Jun' },
   { key: '2026-07', label: 'Jul' },
   { key: '2026-08', label: 'Ago' },
+  { key: '2026-09', label: 'Set' },
+  { key: '2026-10', label: 'Out' },
 ]
 
 const CHANNEL_COLORS: Record<Channel, string> = {
@@ -68,8 +70,15 @@ export default function Historico() {
     try {
       const records = await getDailySalesByDateRange(START_DATE, END_DATE)
       setSales(records)
-    } catch (e) {
-      console.error(e)
+    } catch (e: unknown) {
+      console.error('Erro ao carregar dados do Histórico:', e)
+      const err = e as { message?: string }
+      toast({
+        title: 'Erro ao carregar vendas do Histórico',
+        description:
+          err?.message || 'Não foi possível carregar os dados. Tente recarregar a página.',
+        variant: 'destructive',
+      })
     } finally {
       setLoading(false)
     }
@@ -152,11 +161,11 @@ export default function Historico() {
   const selectAll = () => setSelectedChannels(new Set(CHANNELS as readonly Channel[]))
   const clearAll = () => setSelectedChannels(new Set())
 
-  // Dispara a sincronização em massa jan–ago 2026 no backend.
-  const handleSync2026 = async () => {
+  // Dispara a sincronização em massa de 2026 (jan a out) no backend.
+  const handleSync2026 = async (periodStart = '2026-01-01', periodEnd = '2026-09-30') => {
     setSyncing(true)
     try {
-      const result = await syncSaiposAll2026()
+      const result = await syncSaiposAll2026(periodStart, periodEnd)
       const months = result.months || []
       const monthsLine =
         months.length > 0
@@ -170,25 +179,24 @@ export default function Historico() {
               .join(' • ')
           : ''
       toast({
-        title: 'Sincronização 2026 concluída!',
+        title: 'Sincronização concluída!',
         description: `${result.insertedCount} novo(s), ${result.updatedCount} atualizado(s), ${
           result.skippedCount || 0
-        } pulado(s) — ${result.segments || 0} segmentos, ${result.totalSales || 0} venda(s) bruta(s).${
+        } pulado(s) — ${result.segments || 0} segmento(s), ${result.totalSales || 0} venda(s) bruta(s).${
           monthsLine ? '\n' + monthsLine : ''
         }`,
       })
-      // Aguarda 300ms antes de recarregar para dar tempo do backend estabilizar
       await new Promise((resolve) => setTimeout(resolve, 300))
       await loadData()
     } catch (err: unknown) {
       const e = err as ClientResponseError
       const status = e?.status ?? 0
       let title = 'Erro na sincronização'
-      let message = e?.response?.error || e?.message || 'Erro ao sincronizar jan–ago 2026'
+      let message = e?.response?.error || e?.message || 'Erro ao sincronizar dados da Saipos'
       if (status === 504) {
         title = 'Timeout / API demorou para responder'
         message =
-          'A API do Saipos demorou demais para responder ao processar o período de 8 meses. Tente novamente em alguns instantes.'
+          'A API do Saipos demorou demais para responder ao processar o período. Tente novamente ou selecione sincronizar apenas Setembro.'
       } else if (status === 0 || status === 503) {
         title = 'Erro de conexão com a Saipos'
       }
@@ -214,22 +222,40 @@ export default function Historico() {
           <h2 className="text-2xl font-bold tracking-tight">Histórico 2026</h2>
           <p className="text-muted-foreground text-sm flex items-center gap-1.5">
             <CalendarRange className="h-3.5 w-3.5" />
-            Evolução do faturamento por canal — janeiro a agosto de 2026
+            Evolução do faturamento por canal — janeiro a outubro de 2026
           </p>
         </div>
-        <Button onClick={handleSync2026} disabled={syncing} variant="default">
-          {syncing ? (
-            <>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            onClick={() => handleSync2026('2026-09-01', '2026-09-30')}
+            disabled={syncing}
+            variant="outline"
+          >
+            {syncing ? (
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              Sincronizando 2026...
-            </>
-          ) : (
-            <>
+            ) : (
               <RefreshCw className="mr-2 h-4 w-4" />
-              Sincronizar Jan–Ago 2026
-            </>
-          )}
-        </Button>
+            )}
+            Sincronizar Setembro
+          </Button>
+          <Button
+            onClick={() => handleSync2026('2026-01-01', '2026-09-30')}
+            disabled={syncing}
+            variant="default"
+          >
+            {syncing ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Sincronizando...
+              </>
+            ) : (
+              <>
+                <RefreshCw className="mr-2 h-4 w-4" />
+                Sincronizar Jan–Set 2026
+              </>
+            )}
+          </Button>
+        </div>
       </div>
 
       {/* Filtro de canais */}
@@ -285,7 +311,7 @@ export default function Historico() {
             Evolução do Faturamento por Canal
           </CardTitle>
           <CardDescription className="text-xs">
-            Faturamento mensal de cada canal de venda (jan–ago 2026)
+            Faturamento mensal de cada canal de venda (jan–out 2026)
           </CardDescription>
         </CardHeader>
         <CardContent className="h-[400px]">
@@ -477,7 +503,7 @@ export default function Historico() {
       {/* Badge informativo do período */}
       <div className="flex items-center justify-center">
         <Badge variant="secondary" className="text-xs">
-          Período fixo: 01/01/2026 a 31/08/2026 — dados de saipos_sales (daily_sales)
+          Período: 01/01/2026 a 31/10/2026 — dados de saipos_sales (daily_sales)
         </Badge>
       </div>
     </div>

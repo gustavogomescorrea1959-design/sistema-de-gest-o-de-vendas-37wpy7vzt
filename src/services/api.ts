@@ -35,6 +35,9 @@ export const getDailySalesByDateRange = async (
   let page = 1
   let hasMore = true
 
+  let consecutive429 = 0
+  const max429Retries = 5
+
   while (hasMore) {
     try {
       const res = await pb.collection('daily_sales').getList<DailySale>(page, perPage, {
@@ -42,17 +45,26 @@ export const getDailySalesByDateRange = async (
         sort: 'date',
       })
       records.push(...res.items)
+      consecutive429 = 0
       if (res.items.length < perPage || page >= res.totalPages) {
         hasMore = false
       } else {
         page++
-        await new Promise((resolve) => setTimeout(resolve, 100))
+        // Delay preventivo de 250ms entre páginas para respeitar o rate limit do PocketBase
+        await new Promise((resolve) => setTimeout(resolve, 250))
       }
     } catch (err: unknown) {
       const status = (err as { status?: number })?.status
       if (status === 429) {
-        // Se atingir 429, aguarda 1 segundo e tenta a mesma página novamente
-        await new Promise((resolve) => setTimeout(resolve, 1000))
+        consecutive429++
+        if (consecutive429 > max429Retries) {
+          throw new Error(
+            'Muitas requisições simultâneas (HTTP 429). Por favor, aguarde alguns segundos e tente novamente.',
+          )
+        }
+        // Backoff exponencial com jitter simples: 1.5s, 3s, 4.5s...
+        const waitMs = consecutive429 * 1500
+        await new Promise((resolve) => setTimeout(resolve, waitMs))
         continue
       }
       throw err
