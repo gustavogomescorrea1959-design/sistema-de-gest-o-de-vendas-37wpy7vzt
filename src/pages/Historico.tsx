@@ -21,7 +21,14 @@ import {
   ChartLegend,
   ChartLegendContent,
 } from '@/components/ui/chart'
-import { Loader2, RefreshCw, LineChart as LineChartIcon, CalendarRange } from 'lucide-react'
+import {
+  Loader2,
+  RefreshCw,
+  LineChart as LineChartIcon,
+  CalendarRange,
+  ShoppingBag,
+  TrendingUp,
+} from 'lucide-react'
 import { ClientResponseError } from 'pocketbase'
 import { getDailySalesByDateRange } from '@/services/api'
 import { syncSaiposAll2026 } from '@/services/saipos-sync'
@@ -90,20 +97,40 @@ export default function Historico() {
 
   useRealtime('daily_sales', () => loadData())
 
-  // Estrutura principal: matrix[channel][monthKey] = revenue.
+  // Estrutura principal: matrizes por canal e mês para Faturamento, Pedidos e Ticket Médio.
   // Apenas canais reconhecidos (CHANNELS) entram — registros legados de canais
   // removidos (ex.: "Desconhecido") são ignorados, igual ao Dashboard.
-  const { matrix, monthTotals, channelTotals, grandTotal } = useMemo(() => {
+  const {
+    matrix,
+    ordersMatrix,
+    ticketMatrix,
+    monthTotals,
+    monthOrderTotals,
+    channelTotals,
+    channelOrderTotals,
+    grandTotal,
+    grandOrdersTotal,
+  } = useMemo(() => {
     const m = {} as Record<Channel, Record<string, number>>
+    const om = {} as Record<Channel, Record<string, number>>
+    const tm = {} as Record<Channel, Record<string, number>>
     const mt = {} as Record<string, number>
+    const mot = {} as Record<string, number>
     const ct = {} as Record<Channel, number>
+    const cot = {} as Record<Channel, number>
     let grand = 0
+    let grandOrders = 0
 
     CHANNELS.forEach((ch) => {
       m[ch] = {}
+      om[ch] = {}
+      tm[ch] = {}
       ct[ch] = 0
+      cot[ch] = 0
       MONTHS.forEach((mo) => {
         m[ch][mo.key] = 0
+        om[ch][mo.key] = 0
+        tm[ch][mo.key] = 0
       })
     })
 
@@ -112,17 +139,44 @@ export default function Historico() {
       const monthKey = s.date.substring(0, 7)
       if (!m[s.channel as Channel] || m[s.channel as Channel][monthKey] === undefined) return
       const rev = s.revenue || 0
+      const ord = s.orders || 0
+
       m[s.channel as Channel][monthKey] += rev
+      om[s.channel as Channel][monthKey] += ord
+
       mt[monthKey] = (mt[monthKey] || 0) + rev
+      mot[monthKey] = (mot[monthKey] || 0) + ord
+
       ct[s.channel as Channel] += rev
+      cot[s.channel as Channel] += ord
+
       grand += rev
+      grandOrders += ord
     })
 
-    return { matrix: m, monthTotals: mt, channelTotals: ct, grandTotal: grand }
+    // Calcula ticket médio mensal = faturamento do mês / pedidos do mês por canal
+    CHANNELS.forEach((ch) => {
+      MONTHS.forEach((mo) => {
+        const rev = m[ch][mo.key] || 0
+        const ord = om[ch][mo.key] || 0
+        tm[ch][mo.key] = ord > 0 ? Math.round((rev / ord) * 100) / 100 : 0
+      })
+    })
+
+    return {
+      matrix: m,
+      ordersMatrix: om,
+      ticketMatrix: tm,
+      monthTotals: mt,
+      monthOrderTotals: mot,
+      channelTotals: ct,
+      channelOrderTotals: cot,
+      grandTotal: grand,
+      grandOrdersTotal: grandOrders,
+    }
   }, [sales])
 
-  // Dados para o gráfico de linhas: um ponto por mês, uma linha por canal
-  // selecionado. Meses sem dados aparecem como 0 para manter o eixo X contínuo.
+  // Dados para o gráfico de Faturamento: um ponto por mês, uma linha por canal selecionado.
   const lineChartData = useMemo(() => {
     return MONTHS.map((mo) => {
       const point: Record<string, number | string> = { month: mo.label }
@@ -134,6 +188,32 @@ export default function Historico() {
       return point
     })
   }, [matrix, selectedChannels])
+
+  // Dados para o gráfico de Pedidos por Canal
+  const ordersChartData = useMemo(() => {
+    return MONTHS.map((mo) => {
+      const point: Record<string, number | string> = { month: mo.label }
+      CHANNELS.forEach((ch) => {
+        if (selectedChannels.has(ch)) {
+          point[ch] = ordersMatrix[ch]?.[mo.key] || 0
+        }
+      })
+      return point
+    })
+  }, [ordersMatrix, selectedChannels])
+
+  // Dados para o gráfico de Ticket Médio por Canal
+  const ticketChartData = useMemo(() => {
+    return MONTHS.map((mo) => {
+      const point: Record<string, number | string> = { month: mo.label }
+      CHANNELS.forEach((ch) => {
+        if (selectedChannels.has(ch)) {
+          point[ch] = ticketMatrix[ch]?.[mo.key] || 0
+        }
+      })
+      return point
+    })
+  }, [ticketMatrix, selectedChannels])
 
   // Configuração dinâmica do gráfico: só inclui os canais selecionados.
   const chartConfig = useMemo(() => {
@@ -303,64 +383,190 @@ export default function Historico() {
         </CardContent>
       </Card>
 
-      {/* Gráfico de linhas */}
-      <Card className="shadow-subtle">
-        <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2">
-            <LineChartIcon className="h-4 w-4 text-primary" />
-            Evolução do Faturamento por Canal
-          </CardTitle>
-          <CardDescription className="text-xs">
-            Faturamento mensal de cada canal de venda (jan–out 2026)
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="h-[400px]">
-          {selectedChannels.size === 0 ? (
-            <div className="h-full flex items-center justify-center text-muted-foreground text-sm">
-              Selecione ao menos um canal para exibir o gráfico.
-            </div>
-          ) : (
-            <ChartContainer config={chartConfig} className="h-full w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={lineChartData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                  <XAxis dataKey="month" fontSize={12} tickLine={false} axisLine={false} />
-                  <YAxis
-                    fontSize={12}
-                    tickFormatter={(v) => `R$${(v as number) / 1000}k`}
-                    tickLine={false}
-                    axisLine={false}
-                    width={70}
-                  />
-                  <ChartTooltip
-                    content={
-                      <ChartTooltipContent
-                        labelFormatter={(_, payload) => {
-                          const m = payload?.[0]?.payload?.month as string | undefined
-                          return m ? `Mês: ${m}` : ''
-                        }}
-                        formatter={(val) => formatCurrency(val as number)}
-                      />
-                    }
-                  />
-                  <ChartLegend content={<ChartLegendContent />} />
-                  {CHANNELS.filter((ch) => selectedChannels.has(ch)).map((ch) => (
-                    <Line
-                      key={ch}
-                      type="monotone"
-                      dataKey={ch}
-                      stroke={CHANNEL_COLORS[ch]}
-                      strokeWidth={2}
-                      dot={{ r: 3 }}
-                      activeDot={{ r: 5 }}
+      {/* Gráficos de Evolução: Faturamento, Pedidos e Ticket Médio */}
+      <div className="space-y-6">
+        {/* Gráfico 1: Evolução do Faturamento por Canal */}
+        <Card className="shadow-subtle">
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <LineChartIcon className="h-4 w-4 text-primary" />
+              Evolução do Faturamento por Canal
+            </CardTitle>
+            <CardDescription className="text-xs">
+              Faturamento mensal de cada canal de venda (jan–out 2026)
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="h-[380px]">
+            {selectedChannels.size === 0 ? (
+              <div className="h-full flex items-center justify-center text-muted-foreground text-sm">
+                Selecione ao menos um canal para exibir o gráfico.
+              </div>
+            ) : (
+              <ChartContainer config={chartConfig} className="h-full w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart
+                    data={lineChartData}
+                    margin={{ top: 10, right: 20, left: 0, bottom: 0 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                    <XAxis dataKey="month" fontSize={12} tickLine={false} axisLine={false} />
+                    <YAxis
+                      fontSize={12}
+                      tickFormatter={(v) => `R$${(v as number) / 1000}k`}
+                      tickLine={false}
+                      axisLine={false}
+                      width={70}
                     />
-                  ))}
-                </LineChart>
-              </ResponsiveContainer>
-            </ChartContainer>
-          )}
-        </CardContent>
-      </Card>
+                    <ChartTooltip
+                      content={
+                        <ChartTooltipContent
+                          labelFormatter={(_, payload) => {
+                            const m = payload?.[0]?.payload?.month as string | undefined
+                            return m ? `Mês: ${m}` : ''
+                          }}
+                          formatter={(val) => formatCurrency(val as number)}
+                        />
+                      }
+                    />
+                    <ChartLegend content={<ChartLegendContent />} />
+                    {CHANNELS.filter((ch) => selectedChannels.has(ch)).map((ch) => (
+                      <Line
+                        key={ch}
+                        type="monotone"
+                        dataKey={ch}
+                        stroke={CHANNEL_COLORS[ch]}
+                        strokeWidth={2}
+                        dot={{ r: 3 }}
+                        activeDot={{ r: 5 }}
+                      />
+                    ))}
+                  </LineChart>
+                </ResponsiveContainer>
+              </ChartContainer>
+            )}
+          </CardContent>
+        </Card>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Gráfico 2: Evolução de Pedidos por Canal */}
+          <Card className="shadow-subtle">
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2">
+                <ShoppingBag className="h-4 w-4 text-primary" />
+                Evolução de Pedidos por Canal
+              </CardTitle>
+              <CardDescription className="text-xs">
+                Total de pedidos mensais em cada canal de venda (jan–out 2026)
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="h-[340px]">
+              {selectedChannels.size === 0 ? (
+                <div className="h-full flex items-center justify-center text-muted-foreground text-sm">
+                  Selecione ao menos um canal para exibir o gráfico.
+                </div>
+              ) : (
+                <ChartContainer config={chartConfig} className="h-full w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart
+                      data={ordersChartData}
+                      margin={{ top: 10, right: 20, left: 0, bottom: 0 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                      <XAxis dataKey="month" fontSize={12} tickLine={false} axisLine={false} />
+                      <YAxis fontSize={12} tickLine={false} axisLine={false} width={50} />
+                      <ChartTooltip
+                        content={
+                          <ChartTooltipContent
+                            labelFormatter={(_, payload) => {
+                              const m = payload?.[0]?.payload?.month as string | undefined
+                              return m ? `Mês: ${m}` : ''
+                            }}
+                            formatter={(val) => `${val} pedidos`}
+                          />
+                        }
+                      />
+                      <ChartLegend content={<ChartLegendContent />} />
+                      {CHANNELS.filter((ch) => selectedChannels.has(ch)).map((ch) => (
+                        <Line
+                          key={ch}
+                          type="monotone"
+                          dataKey={ch}
+                          stroke={CHANNEL_COLORS[ch]}
+                          strokeWidth={2}
+                          dot={{ r: 3 }}
+                          activeDot={{ r: 5 }}
+                        />
+                      ))}
+                    </LineChart>
+                  </ResponsiveContainer>
+                </ChartContainer>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Gráfico 3: Evolução do Ticket Médio por Canal */}
+          <Card className="shadow-subtle">
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2">
+                <TrendingUp className="h-4 w-4 text-primary" />
+                Evolução do Ticket Médio por Canal
+              </CardTitle>
+              <CardDescription className="text-xs">
+                Ticket médio mensal (Faturamento / Pedidos) por canal (jan–out 2026)
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="h-[340px]">
+              {selectedChannels.size === 0 ? (
+                <div className="h-full flex items-center justify-center text-muted-foreground text-sm">
+                  Selecione ao menos um canal para exibir o gráfico.
+                </div>
+              ) : (
+                <ChartContainer config={chartConfig} className="h-full w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart
+                      data={ticketChartData}
+                      margin={{ top: 10, right: 20, left: 0, bottom: 0 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                      <XAxis dataKey="month" fontSize={12} tickLine={false} axisLine={false} />
+                      <YAxis
+                        fontSize={12}
+                        tickFormatter={(v) => `R$${v}`}
+                        tickLine={false}
+                        axisLine={false}
+                        width={60}
+                      />
+                      <ChartTooltip
+                        content={
+                          <ChartTooltipContent
+                            labelFormatter={(_, payload) => {
+                              const m = payload?.[0]?.payload?.month as string | undefined
+                              return m ? `Mês: ${m}` : ''
+                            }}
+                            formatter={(val) => formatCurrency(val as number)}
+                          />
+                        }
+                      />
+                      <ChartLegend content={<ChartLegendContent />} />
+                      {CHANNELS.filter((ch) => selectedChannels.has(ch)).map((ch) => (
+                        <Line
+                          key={ch}
+                          type="monotone"
+                          dataKey={ch}
+                          stroke={CHANNEL_COLORS[ch]}
+                          strokeWidth={2}
+                          dot={{ r: 3 }}
+                          activeDot={{ r: 5 }}
+                        />
+                      ))}
+                    </LineChart>
+                  </ResponsiveContainer>
+                </ChartContainer>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      </div>
 
       {/* Tabela mensal: linhas = canais, colunas = meses */}
       <Card className="shadow-subtle overflow-hidden">

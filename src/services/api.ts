@@ -125,3 +125,30 @@ export const confirmSalesImport = async (
     headers: { 'Content-Type': 'application/json' },
   })
 }
+
+export interface RecalculateGoalsResult {
+  success: boolean
+  targetMonth: string
+  pastMonths: Array<{ year: number; month: number; monthKey: string; start: string; end: string }>
+  channels: Array<{
+    channel: string
+    oldStandardTicket: number
+    newStandardTicket: number
+    oldRevenue: number
+    newRevenue: number
+    oldOrders: number
+    newOrders: number
+    monthsConsidered: number
+  }>
+}
+
+export const recalculateGoals = async (
+  targetYear?: number,
+  targetMonth?: number,
+): Promise<RecalculateGoalsResult> => {
+  return pb.send('/backend/v1/recalculate-goals', {
+    method: 'POST',
+    body: JSON.stringify({ targetYear, targetMonth }),
+    headers: { 'Content-Type': 'application/json' },
+  })
+}

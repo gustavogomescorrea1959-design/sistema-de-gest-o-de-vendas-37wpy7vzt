@@ -1,17 +1,18 @@
 import { useState, useEffect } from 'react'
-import { Target, Save, Edit3, Loader2 } from 'lucide-react'
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
+import { Target, Save, Edit3, Loader2, Sparkles, RefreshCw, Lock, Info } from 'lucide-react'
+import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Badge } from '@/components/ui/badge'
 import { useToast } from '@/hooks/use-toast'
 import { Goal, CHANNELS } from '@/types'
-import { getGoals, updateGoal } from '@/services/api'
-import { cn } from '@/lib/utils'
+import { getGoals, updateGoal, recalculateGoals } from '@/services/api'
 
 export default function Metas() {
   const [goals, setGoals] = useState<Goal[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [recalculating, setRecalculating] = useState(false)
   const [isEditing, setIsEditing] = useState(false)
   const [editState, setEditState] = useState<Record<string, Partial<Goal>>>({})
   const { toast } = useToast()
@@ -78,20 +79,38 @@ export default function Metas() {
   }
 
   const handleChange = (id: string, field: keyof Goal, value: string) => {
+    // standard_ticket não é editável manualmente — definido automaticamente pelo sistema
+    if (field === 'standard_ticket') return
+
     setEditState((prev) => {
       const updated = {
         ...prev[id],
         [field]: field === 'notes' || field === 'period' ? value : Number(value) || 0,
       }
 
-      // Auto calc ticket if orders or revenue changes and standard ticket wasn't manually edited this keystroke
-      if (field === 'goal_orders' || field === 'goal_revenue') {
-        const o = Number(updated.goal_orders) || 0
-        const r = Number(updated.goal_revenue) || 0
-        updated.standard_ticket = o > 0 ? r / o : 0
-      }
       return { ...prev, [id]: updated }
     })
+  }
+
+  const handleRecalculateNow = async () => {
+    setRecalculating(true)
+    try {
+      const res = await recalculateGoals()
+      toast({
+        title: 'Metas recalculadas com sucesso!',
+        description: `O Ticket Médio Padrão dos canais foi atualizado com base nos últimos 3 meses (${res.pastMonths.map((m) => m.monthKey).join(', ')}).`,
+      })
+      await loadData()
+    } catch (e: unknown) {
+      const err = e as { message?: string }
+      toast({
+        variant: 'destructive',
+        title: 'Erro ao recalcular metas',
+        description: err?.message || 'Falha ao executar o recálculo automático.',
+      })
+    } finally {
+      setRecalculating(false)
+    }
   }
 
   const formatCurrency = (val: number) =>
@@ -105,11 +124,26 @@ export default function Metas() {
             <Target className="h-6 w-6 text-primary" /> Metas Mensais
           </h2>
           <p className="text-muted-foreground text-sm">
-            Defina os objetivos de vendas para cada canal.
+            Defina os objetivos de vendas para cada canal. O Padrão do Ticket Médio é calculado
+            automaticamente pelo sistema.
           </p>
         </div>
 
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          <Button
+            variant="outline"
+            onClick={handleRecalculateNow}
+            disabled={recalculating || isEditing}
+            title="Recalcula o Ticket Médio Padrão pela média dos últimos 3 meses e ajusta Metas de Faturamento e Pedidos"
+          >
+            {recalculating ? (
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <RefreshCw className="h-4 w-4 mr-2" />
+            )}
+            Recalcular Automaticamente
+          </Button>
+
           {isEditing ? (
             <>
               <Button variant="outline" onClick={() => setIsEditing(false)} disabled={saving}>
@@ -132,6 +166,29 @@ export default function Metas() {
         </div>
       </div>
 
+      {/* Caixa informativa sobre a regra automática */}
+      <div className="rounded-lg border border-primary/20 bg-primary/5 p-4 text-xs text-muted-foreground flex items-start gap-3">
+        <Info className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+        <div className="space-y-1 leading-relaxed">
+          <p className="font-medium text-foreground flex items-center gap-1.5">
+            <Sparkles className="h-3.5 w-3.5 text-primary" />
+            Regra Automática de Metas (1º dia de cada mês)
+          </p>
+          <p>
+            • <strong>Padrão do Ticket Médio:</strong> definido automaticamente pelo sistema pela
+            média dos últimos 3 meses de cada canal (campo somente leitura).
+          </p>
+          <p>
+            • <strong>Meta de Faturamento:</strong> corrigida pela variação apurada no Ticket Médio
+            de cada canal.
+          </p>
+          <p>
+            • <strong>Meta de Pedidos:</strong> ajustada com base no novo Faturamento e no novo
+            Ticket Médio.
+          </p>
+        </div>
+      </div>
+
       <Card className="shadow-subtle">
         <CardContent className="p-0">
           {loading ? (
@@ -146,7 +203,12 @@ export default function Metas() {
                     <th className="px-6 py-4 font-medium">Canal</th>
                     <th className="px-4 py-4 font-medium text-right w-32">Meta Pedidos</th>
                     <th className="px-4 py-4 font-medium text-right w-40">Meta Fat. (R$)</th>
-                    <th className="px-4 py-4 font-medium text-right w-32">Ticket Padrão</th>
+                    <th className="px-4 py-4 font-medium text-right w-44">
+                      <span className="inline-flex items-center gap-1">
+                        Ticket Padrão
+                        <Lock className="h-3 w-3 text-muted-foreground" />
+                      </span>
+                    </th>
                     <th className="px-6 py-4 font-medium min-w-[200px]">Observações</th>
                   </tr>
                 </thead>
@@ -180,19 +242,19 @@ export default function Metas() {
                             formatCurrency(Number(state.goal_revenue))
                           )}
                         </td>
-                        <td className="px-4 py-4 text-right text-muted-foreground">
-                          {isEditing ? (
-                            <Input
-                              type="number"
-                              value={state.standard_ticket}
-                              onChange={(e) =>
-                                handleChange(g.id, 'standard_ticket', e.target.value)
-                              }
-                              className="h-8 text-right bg-muted/30"
-                            />
-                          ) : (
-                            formatCurrency(Number(state.standard_ticket))
-                          )}
+                        <td className="px-4 py-4 text-right">
+                          <div className="flex items-center justify-end gap-1.5">
+                            <span className="font-medium text-foreground">
+                              {formatCurrency(Number(state.standard_ticket))}
+                            </span>
+                            <Badge
+                              variant="outline"
+                              className="text-[10px] px-1.5 py-0 h-5 font-normal text-muted-foreground border-dashed"
+                              title="Definido pelo sistema (média dos últimos 3 meses)"
+                            >
+                              Auto
+                            </Badge>
+                          </div>
                         </td>
                         <td className="px-6 py-4">
                           {isEditing ? (

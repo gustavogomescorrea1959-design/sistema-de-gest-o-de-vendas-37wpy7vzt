@@ -81,14 +81,22 @@ export default function Dashboard() {
     let totalRevenue = 0
     let totalGoalRevenue = 0
 
+    let totalGoalOrders = 0
+
     const channelStats = CHANNELS.reduce(
       (acc, ch) => {
-        acc[ch] = { orders: 0, revenue: 0, goalRevenue: 0, goalOrders: 0 }
+        acc[ch] = { orders: 0, revenue: 0, goalRevenue: 0, goalOrders: 0, standardTicket: 0 }
         return acc
       },
       {} as Record<
         Channel,
-        { orders: number; revenue: number; goalRevenue: number; goalOrders: number }
+        {
+          orders: number
+          revenue: number
+          goalRevenue: number
+          goalOrders: number
+          standardTicket: number
+        }
       >,
     )
 
@@ -105,9 +113,11 @@ export default function Dashboard() {
 
     goals.forEach((g) => {
       totalGoalRevenue += g.goal_revenue
+      totalGoalOrders += g.goal_orders
       if (channelStats[g.channel]) {
         channelStats[g.channel].goalRevenue = g.goal_revenue
         channelStats[g.channel].goalOrders = g.goal_orders
+        channelStats[g.channel].standardTicket = g.standard_ticket || 0
       }
     })
 
@@ -157,6 +167,7 @@ export default function Dashboard() {
       totalOrders,
       totalRevenue,
       totalGoalRevenue,
+      totalGoalOrders,
       ticket,
       progress,
       channelStats,
@@ -380,10 +391,16 @@ export default function Dashboard() {
         </Card>
       </div>
 
-      {/* Table */}
+      {/* Quadro: Acompanhamento do Mês */}
       <Card className="shadow-subtle overflow-hidden">
-        <CardHeader className="bg-muted/30 pb-4 border-b border-border">
-          <CardTitle className="text-base">Resumo do Mês</CardTitle>
+        <CardHeader className="bg-muted/30 pb-4 border-b border-border flex flex-row items-center justify-between">
+          <div>
+            <CardTitle className="text-base">Acompanhamento do Mês</CardTitle>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Desempenho por canal de venda, ticket médio do momento, ticket da meta e projeção de
+              fechamento
+            </p>
+          </div>
         </CardHeader>
         <div className="overflow-x-auto">
           <table className="w-full text-sm text-left">
@@ -391,35 +408,55 @@ export default function Dashboard() {
               <tr>
                 <th className="px-4 py-3 font-medium">Canal</th>
                 <th className="px-4 py-3 font-medium text-right">Pedidos</th>
-                <th className="px-4 py-3 font-medium text-right">Faturamento</th>
-                <th className="px-4 py-3 font-medium text-right">Tkt Médio</th>
-                <th className="px-4 py-3 font-medium text-right">Projeção Fechto Mês</th>
-                <th className="px-4 py-3 font-medium text-right">% Meta (R$)</th>
+                <th className="px-4 py-3 font-medium text-right">Faturamento Acumulado</th>
+                <th className="px-4 py-3 font-medium text-right">Projeção Fechamento Mês</th>
+                <th className="px-4 py-3 font-medium text-right">Ticket Médio do Momento</th>
+                <th className="px-4 py-3 font-medium text-right">Ticket Médio da Meta</th>
+                <th className="px-4 py-3 font-medium text-right">% da Meta Atingido</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
               {CHANNELS.map((ch) => {
                 const stat = metrics.channelStats[ch]
-                const tkt = stat.orders > 0 ? stat.revenue / stat.orders : 0
+                const tktMomento = stat.orders > 0 ? stat.revenue / stat.orders : 0
+                const tktMeta =
+                  stat.goalOrders > 0
+                    ? stat.goalRevenue / stat.goalOrders
+                    : stat.standardTicket > 0
+                      ? stat.standardTicket
+                      : 0
                 const perc = stat.goalRevenue > 0 ? (stat.revenue / stat.goalRevenue) * 100 : 0
                 return (
                   <tr key={ch} className="hover:bg-muted/30 transition-colors">
-                    <td className="px-4 py-3 font-medium text-foreground">{ch}</td>
-                    <td className="px-4 py-3 text-right">{stat.orders}</td>
+                    <td className="px-4 py-3 font-medium text-foreground">
+                      <span className="flex items-center gap-2">
+                        <span
+                          className="h-2.5 w-2.5 rounded-full shrink-0"
+                          style={{ backgroundColor: CHANNEL_COLORS[ch] }}
+                        />
+                        {ch}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-right font-medium">{stat.orders}</td>
                     <td className="px-4 py-3 text-right">{formatCurrency(stat.revenue)}</td>
-                    <td className="px-4 py-3 text-right">{formatCurrency(tkt)}</td>
-                    <td className="px-4 py-3 text-right">
+                    <td className="px-4 py-3 text-right text-muted-foreground">
                       {formatCurrency(metrics.channelProjections[ch])}
+                    </td>
+                    <td className="px-4 py-3 text-right font-medium">
+                      {stat.orders > 0 ? formatCurrency(tktMomento) : '—'}
+                    </td>
+                    <td className="px-4 py-3 text-right text-muted-foreground">
+                      {tktMeta > 0 ? formatCurrency(tktMeta) : '—'}
                     </td>
                     <td className="px-4 py-3 text-right">
                       <span
                         className={cn(
                           'inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium',
                           perc >= 100
-                            ? 'bg-emerald-100 text-emerald-800'
+                            ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
                             : perc >= 80
-                              ? 'bg-amber-100 text-amber-800'
-                              : 'bg-red-100 text-red-800',
+                              ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
+                              : 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300',
                         )}
                       >
                         {perc.toFixed(1)}%
@@ -428,14 +465,27 @@ export default function Dashboard() {
                   </tr>
                 )
               })}
-              <tr className="bg-muted/50 font-semibold border-t-2 border-border text-foreground">
-                <td className="px-4 py-4">Total Geral</td>
-                <td className="px-4 py-4 text-right">{metrics.totalOrders}</td>
-                <td className="px-4 py-4 text-right">{formatCurrency(metrics.totalRevenue)}</td>
-                <td className="px-4 py-4 text-right">{formatCurrency(metrics.ticket)}</td>
-                <td className="px-4 py-4 text-right">{formatCurrency(metrics.totalProjection)}</td>
-                <td className="px-4 py-4 text-right">{metrics.progress.toFixed(1)}%</td>
-              </tr>
+              {(() => {
+                const totalGoalTkt =
+                  metrics.totalGoalOrders > 0
+                    ? metrics.totalGoalRevenue / metrics.totalGoalOrders
+                    : 0
+                return (
+                  <tr className="bg-muted/50 font-semibold border-t-2 border-border text-foreground">
+                    <td className="px-4 py-4">Total Geral</td>
+                    <td className="px-4 py-4 text-right">{metrics.totalOrders}</td>
+                    <td className="px-4 py-4 text-right">{formatCurrency(metrics.totalRevenue)}</td>
+                    <td className="px-4 py-4 text-right">
+                      {formatCurrency(metrics.totalProjection)}
+                    </td>
+                    <td className="px-4 py-4 text-right">{formatCurrency(metrics.ticket)}</td>
+                    <td className="px-4 py-4 text-right">
+                      {totalGoalTkt > 0 ? formatCurrency(totalGoalTkt) : '—'}
+                    </td>
+                    <td className="px-4 py-4 text-right">{metrics.progress.toFixed(1)}%</td>
+                  </tr>
+                )
+              })()}
             </tbody>
           </table>
         </div>
