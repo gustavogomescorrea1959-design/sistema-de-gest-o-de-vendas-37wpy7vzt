@@ -3,7 +3,7 @@ import { Toaster } from '@/components/ui/toaster'
 import { Toaster as Sonner } from '@/components/ui/sonner'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { AuthProvider } from '@/hooks/use-auth'
-import { ProtectedRoute, AdminRoute } from '@/components/ProtectedRoute'
+import { ProtectedRoute, AdminRoute, ModuleRoute } from '@/components/ProtectedRoute'
 
 import Index from './pages/Index'
 import Dashboard from './pages/Dashboard'
@@ -25,10 +25,20 @@ const App = () => (
             <Route path="/" element={<Index />} />
 
             <Route element={<ProtectedRoute />}>
-              <Route path="/dashboard" element={<Dashboard />} />
-              <Route path="/vendas-diarias" element={<VendasDiarias />} />
-              <Route path="/metas" element={<Metas />} />
-              <Route path="/historico" element={<Historico />} />
+              <Route element={<ModuleRoute moduleId="dashboard" moduleName="Dashboard" />}>
+                <Route path="/dashboard" element={<Dashboard />} />
+              </Route>
+              <Route
+                element={<ModuleRoute moduleId="vendas-diarias" moduleName="Vendas Diárias" />}
+              >
+                <Route path="/vendas-diarias" element={<VendasDiarias />} />
+              </Route>
+              <Route element={<ModuleRoute moduleId="metas" moduleName="Metas" />}>
+                <Route path="/metas" element={<Metas />} />
+              </Route>
+              <Route element={<ModuleRoute moduleId="historico" moduleName="Histórico" />}>
+                <Route path="/historico" element={<Historico />} />
+              </Route>
             </Route>
 
             <Route element={<AdminRoute />}>

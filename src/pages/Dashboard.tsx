@@ -410,6 +410,7 @@ export default function Dashboard() {
                 <th className="px-4 py-3 font-medium text-right">Pedidos</th>
                 <th className="px-4 py-3 font-medium text-right">Faturamento Acumulado</th>
                 <th className="px-4 py-3 font-medium text-right">Projeção Fechamento Mês</th>
+                <th className="px-4 py-3 font-medium text-right">Metas do Mês</th>
                 <th className="px-4 py-3 font-medium text-right">Ticket Médio do Momento</th>
                 <th className="px-4 py-3 font-medium text-right">Ticket Médio da Meta</th>
                 <th className="px-4 py-3 font-medium text-right">% da Meta Atingido</th>
@@ -441,6 +442,9 @@ export default function Dashboard() {
                     <td className="px-4 py-3 text-right">{formatCurrency(stat.revenue)}</td>
                     <td className="px-4 py-3 text-right text-muted-foreground">
                       {formatCurrency(metrics.channelProjections[ch])}
+                    </td>
+                    <td className="px-4 py-3 text-right font-medium text-foreground">
+                      {stat.goalRevenue > 0 ? formatCurrency(stat.goalRevenue) : '—'}
                     </td>
                     <td className="px-4 py-3 text-right font-medium">
                       {stat.orders > 0 ? formatCurrency(tktMomento) : '—'}
@@ -477,6 +481,11 @@ export default function Dashboard() {
                     <td className="px-4 py-4 text-right">{formatCurrency(metrics.totalRevenue)}</td>
                     <td className="px-4 py-4 text-right">
                       {formatCurrency(metrics.totalProjection)}
+                    </td>
+                    <td className="px-4 py-4 text-right">
+                      {metrics.totalGoalRevenue > 0
+                        ? formatCurrency(metrics.totalGoalRevenue)
+                        : '—'}
                     </td>
                     <td className="px-4 py-4 text-right">{formatCurrency(metrics.ticket)}</td>
                     <td className="px-4 py-4 text-right">

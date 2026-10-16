@@ -2,6 +2,7 @@ import { Link, useLocation } from 'react-router-dom'
 import { LayoutDashboard, ClipboardList, Target, LineChart, Users, LogOut } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/hooks/use-auth'
+import { AppModuleId } from '@/services/permissions'
 import {
   Sidebar,
   SidebarContent,
@@ -17,29 +18,38 @@ import {
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import logoAlecrim from '@/assets/icone-alecrim-c1c5d.png'
 
-const navItems = [
-  { title: 'Dashboard', icon: LayoutDashboard, url: '/dashboard' },
-  { title: 'Vendas Diárias', icon: ClipboardList, url: '/vendas-diarias' },
-  { title: 'Metas', icon: Target, url: '/metas' },
-  { title: 'Histórico', icon: LineChart, url: '/historico' },
-  { title: 'Usuários', icon: Users, url: '/usuarios', adminOnly: true },
+interface NavItem {
+  id: AppModuleId
+  title: string
+  icon: typeof LayoutDashboard
+  url: string
+  adminOnly?: boolean
+}
+
+const navItems: NavItem[] = [
+  { id: 'dashboard', title: 'Dashboard', icon: LayoutDashboard, url: '/dashboard' },
+  { id: 'vendas-diarias', title: 'Vendas Diárias', icon: ClipboardList, url: '/vendas-diarias' },
+  { id: 'metas', title: 'Metas', icon: Target, url: '/metas' },
+  { id: 'historico', title: 'Histórico', icon: LineChart, url: '/historico' },
+  { id: 'usuarios', title: 'Usuários', icon: Users, url: '/usuarios', adminOnly: true },
 ]
 
 export function AppSidebar() {
   const location = useLocation()
-  const { user, signOut } = useAuth()
+  const { user, signOut, isAdmin, canAccess } = useAuth()
   const { setOpenMobile } = useSidebar()
 
   const handleLinkClick = () => {
     setOpenMobile(false)
   }
 
-  // O item "Usuários" só aparece para administradores.
-  const isAdminUser =
-    typeof (user as any)?.isSuperuser === 'function' && (user as any).isSuperuser()
-      ? true
-      : (user as any)?.role === 'admin'
-  const visibleNavItems = navItems.filter((item: any) => !item.adminOnly || isAdminUser)
+  // Sidebar filtra dinamicamente pelos módulos permitidos para o usuário atual:
+  // Admin sempre vê todos; usuário comum vê apenas o que o admin liberou.
+  const visibleNavItems = navItems.filter((item) => {
+    if (isAdmin) return true
+    if (item.adminOnly) return false
+    return canAccess(item.id)
+  })
 
   return (
     <Sidebar className="border-r border-border/50">

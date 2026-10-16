@@ -44,6 +44,7 @@ export const createUser = async (data: {
   name: string
   email: string
   password: string
+  pages?: string[]
 }): Promise<UserRecord> => {
   return pb.send('/backend/v1/users/create', {
     method: 'POST',

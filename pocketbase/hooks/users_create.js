@@ -78,6 +78,20 @@ routerAdd(
       return e.json(400, { error: 'Falha ao criar usuário: ' + errMsg })
     }
 
+    // Cria registro inicial em user_permissions se a collection existir
+    try {
+      var permCol = $app.findCollectionByNameOrId('user_permissions')
+      var permRecord = new Record(permCol)
+      permRecord.set('user', record.get('id'))
+      var initialPages = Array.isArray(body.pages)
+        ? body.pages
+        : ['dashboard', 'vendas-diarias', 'metas', 'historico']
+      permRecord.set('pages', initialPages)
+      $app.save(permRecord)
+    } catch (permErr) {
+      $app.logger().warn('users_create: aviso ao criar user_permissions: ' + permErr)
+    }
+
     return e.json(200, {
       id: record.get('id'),
       email: record.get('email'),

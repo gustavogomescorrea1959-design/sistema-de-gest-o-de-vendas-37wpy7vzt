@@ -1,10 +1,20 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Users as UsersIcon, UserPlus, KeyRound, Power, Loader2, ShieldCheck } from 'lucide-react'
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
+import {
+  Users as UsersIcon,
+  UserPlus,
+  KeyRound,
+  Power,
+  Loader2,
+  ShieldCheck,
+  Shield,
+  Check,
+} from 'lucide-react'
+import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
+import { Checkbox } from '@/components/ui/checkbox'
 import {
   Table,
   TableHeader,
@@ -30,6 +40,13 @@ import {
   setUserActive,
   type UserRecord,
 } from '@/services/users'
+import {
+  ALL_APP_MODULES,
+  AppModuleId,
+  DEFAULT_USER_MODULES,
+  getAllUserPermissions,
+  saveUserPermissions,
+} from '@/services/permissions'
 import { format } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 
@@ -43,24 +60,27 @@ const formatDate = (iso: string) => {
 }
 
 export default function Usuarios() {
-  const { user: currentUser } = useAuth()
+  const { user: currentUser, refreshPermissions } = useAuth()
   const { toast } = useToast()
   const [users, setUsers] = useState<UserRecord[]>([])
+  const [permissionsMap, setPermissionsMap] = useState<Record<string, AppModuleId[]>>({})
   const [loading, setLoading] = useState(true)
   const [createOpen, setCreateOpen] = useState(false)
   const [resetTarget, setResetTarget] = useState<UserRecord | null>(null)
   const [toggleTarget, setToggleTarget] = useState<UserRecord | null>(null)
+  const [permissionsTarget, setPermissionsTarget] = useState<UserRecord | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const list = await getUsers()
+      const [list, perms] = await Promise.all([getUsers(), getAllUserPermissions()])
       setUsers(list)
+      setPermissionsMap(perms)
     } catch {
       toast({
         variant: 'destructive',
         title: 'Erro',
-        description: 'Não foi possível carregar os usuários.',
+        description: 'Não foi possível carregar os usuários ou permissões.',
       })
     } finally {
       setLoading(false)
@@ -76,9 +96,12 @@ export default function Usuarios() {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h2 className="text-2xl font-bold tracking-tight flex items-center gap-2">
-            <UsersIcon className="h-6 w-6 text-primary" /> Usuários
+            <UsersIcon className="h-6 w-6 text-primary" /> Usuários e Permissões
           </h2>
-          <p className="text-muted-foreground text-sm">Gerencie quem pode acessar o sistema.</p>
+          <p className="text-muted-foreground text-sm">
+            Gerencie quem pode acessar o sistema e controle página por página o que cada usuário
+            pode visualizar.
+          </p>
         </div>
         <Button onClick={() => setCreateOpen(true)}>
           <UserPlus className="h-4 w-4 mr-2" /> Novo Usuário
@@ -103,6 +126,7 @@ export default function Usuarios() {
                     <TableHead>Nome</TableHead>
                     <TableHead>Email</TableHead>
                     <TableHead>Perfil</TableHead>
+                    <TableHead>Acessos Permitidos</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Criado em</TableHead>
                     <TableHead className="text-right">Ações</TableHead>
@@ -113,6 +137,10 @@ export default function Usuarios() {
                     const isActive = u.active !== false
                     const isSelf = u.id === currentUser?.id
                     const isAdmin = u.role === 'admin'
+                    const userPages = isAdmin
+                      ? ALL_APP_MODULES.map((m) => m.id)
+                      : permissionsMap[u.id] || DEFAULT_USER_MODULES
+
                     return (
                       <TableRow key={u.id}>
                         <TableCell className="font-medium text-foreground">
@@ -129,6 +157,34 @@ export default function Usuarios() {
                           )}
                         </TableCell>
                         <TableCell>
+                          {isAdmin ? (
+                            <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400">
+                              Acesso total (todas as páginas)
+                            </span>
+                          ) : (
+                            <div className="flex flex-wrap gap-1 max-w-[280px]">
+                              {userPages.length === 0 ? (
+                                <span className="text-xs text-muted-foreground italic">
+                                  Nenhuma página liberada
+                                </span>
+                              ) : (
+                                userPages.map((pid) => {
+                                  const mod = ALL_APP_MODULES.find((m) => m.id === pid)
+                                  return (
+                                    <Badge
+                                      key={pid}
+                                      variant="secondary"
+                                      className="text-[11px] px-1.5 py-0 h-5"
+                                    >
+                                      {mod?.label || pid}
+                                    </Badge>
+                                  )
+                                })
+                              )}
+                            </div>
+                          )}
+                        </TableCell>
+                        <TableCell>
                           {isActive ? (
                             <Badge className="border-transparent bg-green-100 text-green-700 hover:bg-green-100">
                               Ativo
@@ -142,6 +198,19 @@ export default function Usuarios() {
                         </TableCell>
                         <TableCell className="text-right">
                           <div className="flex justify-end gap-1">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setPermissionsTarget(u)}
+                              disabled={isAdmin}
+                              title={
+                                isAdmin
+                                  ? 'Administrador sempre tem acesso completo'
+                                  : 'Definir permissões de acesso'
+                              }
+                            >
+                              <Shield className="h-4 w-4" />
+                            </Button>
                             <Button
                               variant="ghost"
                               size="sm"
@@ -195,7 +264,163 @@ export default function Usuarios() {
         onClose={() => setToggleTarget(null)}
         onDone={load}
       />
+      <UserPermissionsDialog
+        target={permissionsTarget}
+        currentPermissions={permissionsTarget ? permissionsMap[permissionsTarget.id] : undefined}
+        onClose={() => setPermissionsTarget(null)}
+        onSaved={async () => {
+          await load()
+          await refreshPermissions()
+        }}
+      />
     </div>
+  )
+}
+
+// --- Dialog: Permissões de Acesso por Usuário ---
+function UserPermissionsDialog({
+  target,
+  currentPermissions,
+  onClose,
+  onSaved,
+}: {
+  target: UserRecord | null
+  currentPermissions?: AppModuleId[]
+  onClose: () => void
+  onSaved: () => void
+}) {
+  const { toast } = useToast()
+  const [selectedPages, setSelectedPages] = useState<AppModuleId[]>([])
+  const [saving, setSaving] = useState(false)
+
+  const open = target !== null
+
+  useEffect(() => {
+    if (target) {
+      if (currentPermissions) {
+        setSelectedPages(currentPermissions)
+      } else {
+        setSelectedPages(DEFAULT_USER_MODULES)
+      }
+    }
+  }, [target, currentPermissions])
+
+  const togglePage = (id: AppModuleId) => {
+    setSelectedPages((prev) => (prev.includes(id) ? prev.filter((p) => p !== id) : [...prev, id]))
+  }
+
+  const handleSelectAll = () => {
+    // Para usuário comum, seleciona todos os módulos de usuário
+    const regular = ALL_APP_MODULES.filter((m) => !m.adminOnly).map((m) => m.id)
+    setSelectedPages(regular)
+  }
+
+  const handleClearAll = () => {
+    setSelectedPages([])
+  }
+
+  const handleSave = async () => {
+    if (!target) return
+    setSaving(true)
+    try {
+      await saveUserPermissions(target.id, selectedPages)
+      toast({
+        title: 'Permissões atualizadas',
+        description: `As permissões de ${target.name || target.email} foram salvas com sucesso.`,
+      })
+      onClose()
+      onSaved()
+    } catch (err: any) {
+      toast({
+        variant: 'destructive',
+        title: 'Erro ao salvar permissões',
+        description: err?.message || 'Falha ao gravar permissões.',
+      })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Shield className="h-5 w-5 text-primary" /> Permissões de Acesso
+          </DialogTitle>
+          <DialogDescription>
+            Defina quais páginas{' '}
+            <strong className="text-foreground">{target?.name || target?.email}</strong> pode
+            visualizar e acessar no aplicativo.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4 py-2">
+          <div className="flex justify-between items-center text-xs">
+            <span className="text-muted-foreground">Módulos do sistema:</span>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={handleSelectAll}
+                className="text-primary hover:underline font-medium"
+              >
+                Marcar todos
+              </button>
+              <span className="text-muted-foreground">•</span>
+              <button
+                type="button"
+                onClick={handleClearAll}
+                className="text-muted-foreground hover:underline"
+              >
+                Desmarcar todos
+              </button>
+            </div>
+          </div>
+
+          <div className="space-y-2 border rounded-md p-3 divide-y divide-border">
+            {ALL_APP_MODULES.filter((mod) => !mod.adminOnly).map((mod) => {
+              const isChecked = selectedPages.includes(mod.id)
+              return (
+                <label
+                  key={mod.id}
+                  className="flex items-start gap-3 py-2 cursor-pointer hover:bg-muted/40 px-2 rounded-sm transition-colors"
+                >
+                  <Checkbox
+                    checked={isChecked}
+                    onCheckedChange={() => togglePage(mod.id)}
+                    className="mt-0.5"
+                  />
+                  <div className="flex-1 text-sm select-none">
+                    <div className="font-medium text-foreground flex items-center gap-1.5">
+                      {mod.label}
+                      <span className="text-xs text-muted-foreground font-normal">
+                        ({mod.path})
+                      </span>
+                    </div>
+                    <div className="text-xs text-muted-foreground">{mod.description}</div>
+                  </div>
+                </label>
+              )
+            })}
+          </div>
+
+          <p className="text-xs text-muted-foreground bg-muted/40 p-2.5 rounded-md">
+            Páginas desmarcadas ficam ocultas do menu lateral deste usuário e, caso ele tente
+            acessá-las pela barra de endereço, será exibida uma tela de acesso restrito.
+          </p>
+        </div>
+
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={onClose} disabled={saving}>
+            Cancelar
+          </Button>
+          <Button type="button" onClick={handleSave} disabled={saving}>
+            {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
+            Salvar Permissões
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }
 
@@ -213,12 +438,14 @@ function CreateUserDialog({
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [selectedPages, setSelectedPages] = useState<AppModuleId[]>(DEFAULT_USER_MODULES)
   const [saving, setSaving] = useState(false)
 
   const reset = () => {
     setName('')
     setEmail('')
     setPassword('')
+    setSelectedPages(DEFAULT_USER_MODULES)
   }
 
   const handleOpenChange = (v: boolean) => {
@@ -226,14 +453,32 @@ function CreateUserDialog({
     onOpenChange(v)
   }
 
+  const togglePage = (id: AppModuleId) => {
+    setSelectedPages((prev) => (prev.includes(id) ? prev.filter((p) => p !== id) : [...prev, id]))
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setSaving(true)
     try {
-      await createUser({ name: name.trim(), email: email.trim().toLowerCase(), password })
+      const created = await createUser({
+        name: name.trim(),
+        email: email.trim().toLowerCase(),
+        password,
+        pages: selectedPages,
+      })
+      // Garante sincronização de permissões caso o endpoint use fallback
+      try {
+        if (created?.id) {
+          await saveUserPermissions(created.id, selectedPages)
+        }
+      } catch {
+        /* intentionally ignored */
+      }
+
       toast({
         title: 'Usuário criado',
-        description: `${name.trim()} já pode acessar o sistema.`,
+        description: `${name.trim()} já pode acessar o sistema com as permissões configuradas.`,
       })
       handleOpenChange(false)
       onCreated()
@@ -296,6 +541,29 @@ function CreateUserDialog({
             />
             <p className="text-xs text-muted-foreground">
               A senha deve ter no mínimo 8 caracteres.
+            </p>
+          </div>
+
+          <div className="space-y-2 pt-2 border-t">
+            <Label className="text-xs font-semibold">Páginas Liberadas</Label>
+            <div className="space-y-1.5 border rounded-md p-2 max-h-48 overflow-y-auto">
+              {ALL_APP_MODULES.filter((mod) => !mod.adminOnly).map((mod) => (
+                <label
+                  key={mod.id}
+                  className="flex items-center gap-2 p-1.5 hover:bg-muted/40 rounded text-xs cursor-pointer select-none"
+                >
+                  <Checkbox
+                    checked={selectedPages.includes(mod.id)}
+                    onCheckedChange={() => togglePage(mod.id)}
+                  />
+                  <span className="font-medium text-foreground">{mod.label}</span>
+                  <span className="text-muted-foreground">({mod.path})</span>
+                </label>
+              ))}
+            </div>
+            <p className="text-[11px] text-muted-foreground">
+              Você pode alterar as páginas permitidas a qualquer momento pelo botão de escudo na
+              tabela.
             </p>
           </div>
           <DialogFooter>
