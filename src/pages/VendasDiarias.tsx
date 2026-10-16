@@ -26,6 +26,7 @@ import { CHANNELS, Channel, DailySale } from '@/types'
 import { getDailySalesByDate, saveDailySale, deleteDailySalesByDate } from '@/services/api'
 import { ImportSalesButton } from '@/components/ImportSalesButton'
 import { useRealtime } from '@/hooks/use-realtime'
+import { useAuth } from '@/hooks/use-auth'
 
 const ICONS: Record<Channel, React.ElementType> = {
   'Loja / Restaurante': Store,
@@ -47,6 +48,7 @@ const initialFormData = (): FormData => {
 }
 
 export default function VendasDiarias() {
+  const { isAdmin } = useAuth()
   const [date, setDate] = useState<Date>(new Date())
   const [formData, setFormData] = useState<FormData>(initialFormData())
   const [loading, setLoading] = useState(false)
@@ -157,7 +159,7 @@ export default function VendasDiarias() {
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
-          <ImportSalesButton onSuccess={() => loadData(date)} />
+          {isAdmin && <ImportSalesButton onSuccess={() => loadData(date)} />}
           <Popover>
             <PopoverTrigger asChild>
               <Button

@@ -10,8 +10,10 @@ import { Calendar } from '@/components/ui/calendar'
 import { cn } from '@/lib/utils'
 import logoAlecrim from '@/assets/icone-alecrim-c1c5d.png'
 import { SettingsDialog } from '@/components/SettingsDialog'
+import { useAuth } from '@/hooks/use-auth'
 
 export function Header() {
+  const { isAdmin } = useAuth()
   const location = useLocation()
   const [searchParams, setSearchParams] = useSearchParams()
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -89,17 +91,20 @@ export function Header() {
             </>
           ) : null}
 
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => setSettingsOpen(true)}
-            className="h-8 w-8"
-          >
-            <Settings className="h-4 w-4" />
-          </Button>
+          {isAdmin && (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setSettingsOpen(true)}
+              className="h-8 w-8"
+              title="Configurações (Token Saipos)"
+            >
+              <Settings className="h-4 w-4" />
+            </Button>
+          )}
         </div>
       </header>
-      <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
+      {isAdmin && <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />}
     </>
   )
 }

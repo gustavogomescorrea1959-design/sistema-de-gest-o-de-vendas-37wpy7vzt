@@ -35,6 +35,7 @@ import { syncSaiposAll2026 } from '@/services/saipos-sync'
 import { useRealtime } from '@/hooks/use-realtime'
 import { useToast } from '@/hooks/use-toast'
 import { CHANNELS, Channel, DailySale } from '@/types'
+import { useAuth } from '@/hooks/use-auth'
 
 // Período: janeiro a outubro de 2026 (inclui setembro e meses correntes).
 const START_DATE = '2026-01-01'
@@ -65,6 +66,7 @@ const CHANNEL_COLORS: Record<Channel, string> = {
 }
 
 export default function Historico() {
+  const { isAdmin } = useAuth()
   const [sales, setSales] = useState<DailySale[]>([])
   const [loading, setLoading] = useState(true)
   const [syncing, setSyncing] = useState(false)
@@ -305,37 +307,39 @@ export default function Historico() {
             Evolução do faturamento por canal — janeiro a outubro de 2026
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button
-            onClick={() => handleSync2026('2026-09-01', '2026-09-30')}
-            disabled={syncing}
-            variant="outline"
-          >
-            {syncing ? (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            ) : (
-              <RefreshCw className="mr-2 h-4 w-4" />
-            )}
-            Sincronizar Setembro
-          </Button>
-          <Button
-            onClick={() => handleSync2026('2026-01-01', '2026-09-30')}
-            disabled={syncing}
-            variant="default"
-          >
-            {syncing ? (
-              <>
+        {isAdmin && (
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              onClick={() => handleSync2026('2026-09-01', '2026-09-30')}
+              disabled={syncing}
+              variant="outline"
+            >
+              {syncing ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Sincronizando...
-              </>
-            ) : (
-              <>
+              ) : (
                 <RefreshCw className="mr-2 h-4 w-4" />
-                Sincronizar Jan–Set 2026
-              </>
-            )}
-          </Button>
-        </div>
+              )}
+              Sincronizar Setembro
+            </Button>
+            <Button
+              onClick={() => handleSync2026('2026-01-01', '2026-09-30')}
+              disabled={syncing}
+              variant="default"
+            >
+              {syncing ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Sincronizando...
+                </>
+              ) : (
+                <>
+                  <RefreshCw className="mr-2 h-4 w-4" />
+                  Sincronizar Jan–Set 2026
+                </>
+              )}
+            </Button>
+          </div>
+        )}
       </div>
 
       {/* Filtro de canais */}

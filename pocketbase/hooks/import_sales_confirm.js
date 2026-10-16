@@ -2,6 +2,30 @@ routerAdd(
   'POST',
   '/backend/v1/import/sales/confirm',
   (e) => {
+    // --- Guarda de admin: só admin autenticado pode confirmar importação de vendas ---
+    var auth = e.auth
+    if (!auth) {
+      return e.json(401, { error: 'Não autenticado.' })
+    }
+    var isAdmin = false
+    try {
+      if (auth.isSuperuser && auth.isSuperuser()) {
+        isAdmin = true
+      }
+    } catch (_) {}
+    if (!isAdmin) {
+      try {
+        if (auth.getString && auth.getString('role') === 'admin') {
+          isAdmin = true
+        }
+      } catch (_) {}
+    }
+    if (!isAdmin) {
+      return e.json(403, {
+        error: 'Apenas administradores podem importar dados de vendas.',
+      })
+    }
+
     var body = e.requestInfo().body || {}
     var records = body.records || []
 

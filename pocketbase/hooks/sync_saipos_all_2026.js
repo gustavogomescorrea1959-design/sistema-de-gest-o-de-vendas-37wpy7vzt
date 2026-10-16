@@ -17,6 +17,30 @@ routerAdd(
   'POST',
   '/backend/v1/sync-saipos-all-2026',
   (e) => {
+    // --- Guarda de admin: só admin autenticado pode sincronizar ---
+    var auth = e.auth
+    if (!auth) {
+      return e.json(401, { error: 'Não autenticado.' })
+    }
+    var isAdmin = false
+    try {
+      if (auth.isSuperuser && auth.isSuperuser()) {
+        isAdmin = true
+      }
+    } catch (_) {}
+    if (!isAdmin) {
+      try {
+        if (auth.getString && auth.getString('role') === 'admin') {
+          isAdmin = true
+        }
+      } catch (_) {}
+    }
+    if (!isAdmin) {
+      return e.json(403, {
+        error: 'Apenas administradores podem executar a sincronização com a Saipos.',
+      })
+    }
+
     // --- Token (igual ao endpoint manual) ---
     var token = $os.getenv('SAIPOS_API_TOKEN') || ''
     if (!token) {
